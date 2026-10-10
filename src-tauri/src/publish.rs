@@ -141,7 +141,7 @@ mod tests {
 
     fn reel() -> VideoChoice {
         VideoChoice::InstagramEmbed {
-            permalink: "https://www.instagram.com/beginveganbegun/reel/DJrCx-vsnAh/".into(),
+            permalink: "https://www.instagram.com/example.user/reel/Dx1Ab-cdEfG/".into(),
         }
     }
 
@@ -268,7 +268,7 @@ mod tests {
         let text = content.find("<p>Con fabes</p>").unwrap();
         let player = content.find("<iframe").unwrap();
         assert!(link < text && text < player, "{content}");
-        assert!(content.contains("src=\"https://www.instagram.com/reel/DJrCx-vsnAh/embed/\""));
+        assert!(content.contains("src=\"https://www.instagram.com/reel/Dx1Ab-cdEfG/embed/\""));
         assert!(content.contains("<div id=\"video\""));
         assert!(content.ends_with("<!-- /wp:html -->"));
     }

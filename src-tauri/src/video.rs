@@ -104,10 +104,10 @@ mod tests {
     #[test]
     fn a_reel_gets_a_reel_player() {
         let embed =
-            VideoEmbed::from_permalink("https://www.instagram.com/reel/DJrCx-vsnAh/").unwrap();
+            VideoEmbed::from_permalink("https://www.instagram.com/reel/Dx1Ab-cdEfG/").unwrap();
         assert_eq!(
             embed.src(),
-            "https://www.instagram.com/reel/DJrCx-vsnAh/embed/"
+            "https://www.instagram.com/reel/Dx1Ab-cdEfG/embed/"
         );
     }
 
@@ -120,12 +120,12 @@ mod tests {
     #[test]
     fn the_permalink_under_a_user_name_works_and_always_leaves_through_the_main_host() {
         let embed = VideoEmbed::from_permalink(
-            "https://m.instagram.com/beginveganbegun/reel/DJrCx-vsnAh/?igsh=abc#top",
+            "https://m.instagram.com/example.user/reel/Dx1Ab-cdEfG/?igsh=abc#top",
         )
         .unwrap();
         assert_eq!(
             embed.src(),
-            "https://www.instagram.com/reel/DJrCx-vsnAh/embed/"
+            "https://www.instagram.com/reel/Dx1Ab-cdEfG/embed/"
         );
     }
 
@@ -133,10 +133,10 @@ mod tests {
     fn anything_that_is_not_a_post_or_a_reel_is_refused() {
         for permalink in [
             "",
-            "https://www.instagram.com/beginveganbegun/",
+            "https://www.instagram.com/example.user/",
             "https://www.instagram.com/explore/",
-            "https://evil.test/reel/DJrCx/",
-            "https://www.instagram.com.evil.test/reel/DJrCx/",
+            "https://evil.test/reel/Dx1Ab/",
+            "https://www.instagram.com.evil.test/reel/Dx1Ab/",
             "javascript:alert(1)",
             "https://www.instagram.com/reel/\"><script>alert(1)</script>/",
             "https://www.instagram.com/reel/a b/",
@@ -151,13 +151,13 @@ mod tests {
 
     #[test]
     fn the_markup_holds_only_the_validated_address() {
-        let html = VideoEmbed::from_permalink("https://www.instagram.com/reel/DJrCx-vsnAh/?x=\"y")
+        let html = VideoEmbed::from_permalink("https://www.instagram.com/reel/Dx1Ab-cdEfG/?x=\"y")
             .unwrap()
             .html();
         assert!(html.starts_with("<!-- wp:html -->\n"));
         assert!(html.ends_with("\n<!-- /wp:html -->"));
         assert_eq!(html.matches("<iframe").count(), 1);
-        assert!(html.contains("src=\"https://www.instagram.com/reel/DJrCx-vsnAh/embed/\""));
+        assert!(html.contains("src=\"https://www.instagram.com/reel/Dx1Ab-cdEfG/embed/\""));
         assert!(html.contains("max-width:400px"));
         assert!(html.contains("height=\"880\""));
         assert!(html.contains("<div id=\"video\""));
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn the_link_jumps_to_the_section_that_holds_the_player() {
-        let embed = VideoEmbed::from_permalink("https://www.instagram.com/reel/DJrCx/").unwrap();
+        let embed = VideoEmbed::from_permalink("https://www.instagram.com/reel/Dx1Ab/").unwrap();
         let link = embed.link_html();
         assert!(link.contains("<a href=\"#video\">Ver el vídeo</a>"));
         assert!(link.starts_with("<!-- wp:paragraph -->"));
@@ -183,12 +183,12 @@ mod tests {
     #[test]
     fn an_embed_choice_is_validated() {
         let ok = resolve(VideoChoice::InstagramEmbed {
-            permalink: "https://www.instagram.com/reel/DJrCx/".into(),
+            permalink: "https://www.instagram.com/reel/Dx1Ab/".into(),
         })
         .unwrap();
         assert_eq!(
             ok.unwrap().src(),
-            "https://www.instagram.com/reel/DJrCx/embed/"
+            "https://www.instagram.com/reel/Dx1Ab/embed/"
         );
         assert_eq!(
             resolve(VideoChoice::InstagramEmbed {

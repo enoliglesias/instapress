@@ -159,8 +159,8 @@ mod tests {
     #[test]
     fn parses_a_profile() {
         assert_eq!(
-            parse("https://www.instagram.com/beginveganbegun/"),
-            Ok(profile("beginveganbegun"))
+            parse("https://www.instagram.com/example.user/"),
+            Ok(profile("example.user"))
         );
         assert_eq!(parse("instagram.com/some.user"), Ok(profile("some.user")));
     }

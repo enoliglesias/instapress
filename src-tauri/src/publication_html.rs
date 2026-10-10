@@ -1122,7 +1122,7 @@ mod tests {
 
     #[test]
     fn the_link_comes_first_then_the_body_and_the_player_last() {
-        let embed = VideoEmbed::from_permalink("https://www.instagram.com/reel/DJrCx/").unwrap();
+        let embed = VideoEmbed::from_permalink("https://www.instagram.com/reel/Dx1Ab/").unwrap();
         let draft = PublicationDraft::new("Titulo", "<p>Hola 💚</p>")
             .unwrap()
             .with_video(Some(embed.clone()));
