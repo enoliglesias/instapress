@@ -27,6 +27,9 @@ pub struct DraftInput {
     /// Optional: the focus keyphrase. Blank means none.
     #[serde(default)]
     pub focus_keyphrase: String,
+    /// Optional: the ids of the categories. None means WordPress chooses its default.
+    #[serde(default)]
+    pub categories: Vec<u64>,
 }
 
 /// Why the draft could not be created.
@@ -59,7 +62,8 @@ where
     let draft = RecipeDraft::new(&input.title, &input.html)?
         .with_slug(&input.slug)
         .with_meta_description(&input.meta_description)?
-        .with_focus_keyphrase(&input.focus_keyphrase)?;
+        .with_focus_keyphrase(&input.focus_keyphrase)?
+        .with_categories(&input.categories)?;
     let draft = draft.with_video(video::resolve(input.video)?);
     let credentials = store.load()?.ok_or(WordPressError::NoSettings)?;
     let image = resolve(input.image, fetcher)?;
@@ -131,6 +135,7 @@ mod tests {
             slug: String::new(),
             meta_description: String::new(),
             focus_keyphrase: String::new(),
+            categories: Vec::new(),
         }
     }
 
@@ -187,6 +192,32 @@ mod tests {
     }
 
     #[test]
+    fn the_chosen_categories_reach_wordpress() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":5}"#)]);
+        let mut with = input(ImageChoice::None);
+        with.categories = vec![7, 7, 3];
+        publish_draft(&saved(), &site, &fetcher(200), with).unwrap();
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert_eq!(body["categories"], serde_json::json!([7, 3]));
+    }
+
+    #[test]
+    fn too_many_categories_stop_everything_before_any_work() {
+        let site = FakeSite::new(vec![]);
+        let mut bad = input(ImageChoice::None);
+        bad.categories = (1..=21).collect();
+        assert_eq!(
+            publish_draft(&saved(), &site, &fetcher(200), bad),
+            Err(PublishError::Draft(DraftError::TooManyCategories {
+                count: 21,
+                max: 20
+            }))
+        );
+        assert!(site.sent.borrow().is_empty());
+    }
+
+    #[test]
     fn a_meta_description_that_is_too_long_stops_everything_before_any_work() {
         let site = FakeSite::new(vec![]);
         let fetcher = fetcher(200);
@@ -213,6 +244,7 @@ mod tests {
         assert_eq!(input.slug, "");
         assert_eq!(input.meta_description, "");
         assert_eq!(input.focus_keyphrase, "");
+        assert!(input.categories.is_empty());
         let with: DraftInput = serde_json::from_str(
             r#"{"title":"T","html":"<p>x</p>","image":{"kind":"none"},
                 "slug":"mi-slug","meta_description":"Una descripción"}"#,

@@ -7,13 +7,16 @@
     "allow-classify-instagram-url",
     "allow-prepare-draft",
     "allow-suggest-slug",
-    "allow-has-token",
+    "allow-token-status",
     "allow-save-token",
+    "allow-refresh-token",
+    "allow-renew-token-if-due",
     "allow-clear-token",
     "allow-list-posts",
     "allow-get-wordpress-settings",
     "allow-save-wordpress-settings",
     "allow-clear-wordpress-settings",
+    "allow-list-categories",
     "allow-create-wordpress-draft"
   ]
 }

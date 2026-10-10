@@ -77,6 +77,25 @@ impl UreqClient {
         Ok(HttpResponse { status, body })
     }
 
+    /// `GET` with the given headers, returning the body as text.
+    pub(crate) fn get_with_headers(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+    ) -> Result<HttpResponse, TransportError> {
+        let mut request = self.agent.get(url);
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        let mut response = request.call().map_err(transport_error)?;
+        let status = response.status().as_u16();
+        let body = response
+            .body_mut()
+            .read_to_string()
+            .map_err(transport_error)?;
+        Ok(HttpResponse { status, body })
+    }
+
     /// `POST` of raw bytes with the given headers, returning the body as text. It may carry an
     /// image, so it gets the longer transfer timeout.
     pub(crate) fn post(

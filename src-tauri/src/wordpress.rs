@@ -262,7 +262,7 @@ impl CredentialsStore for KeyringCredentials {
     }
 }
 
-/// The one HTTP operation the client needs: a `POST` of raw bytes with headers. Implementations
+/// The HTTP operations the client needs: a `POST` of raw bytes and a `GET`, with headers. Implementations
 /// must not put the headers in their errors.
 pub trait WpHttp {
     fn post(
@@ -271,6 +271,8 @@ pub trait WpHttp {
         headers: &[(&str, &str)],
         body: &[u8],
     ) -> Result<HttpResponse, WordPressError>;
+
+    fn get(&self, url: &str, headers: &[(&str, &str)]) -> Result<HttpResponse, WordPressError>;
 }
 
 impl WpHttp for UreqClient {
@@ -283,6 +285,167 @@ impl WpHttp for UreqClient {
         UreqClient::post(self, url, headers, body)
             .map_err(|e| WordPressError::Network(e.to_string()))
     }
+
+    fn get(&self, url: &str, headers: &[(&str, &str)]) -> Result<HttpResponse, WordPressError> {
+        self.get_with_headers(url, headers)
+            .map_err(|e| WordPressError::Network(e.to_string()))
+    }
+}
+
+/// A category as the window lists it. Its place in the tree is its `depth`: 0 for a top-level
+/// category, 1 for a child of one, and so on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CategoryItem {
+    pub id: u64,
+    pub name: String,
+    pub depth: usize,
+}
+
+#[derive(Deserialize)]
+struct RawCategory {
+    id: u64,
+    name: String,
+    /// 0 for a top-level category.
+    #[serde(default)]
+    parent: u64,
+}
+
+/// WordPress answers up to this many categories per page.
+const CATEGORY_PAGE_SIZE: usize = 100;
+/// A site with more categories than this many pages hold is not expected.
+const MAX_CATEGORY_PAGES: u32 = 10;
+
+/// Decodes the HTML entities WordPress leaves in the name of a category (`Lemon &amp; Limes`).
+/// Only the few it writes are known; anything else stays as it is.
+fn decode_entities(text: &str) -> String {
+    let mut decoded = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find('&') {
+        decoded.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let entity = rest
+            .find(';')
+            .filter(|end| *end <= 10)
+            .map(|end| &rest[1..end]);
+        let character = entity.and_then(|name| match name {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            "nbsp" => Some('\u{a0}'),
+            _ => name
+                .strip_prefix('#')
+                .and_then(|digits| match digits.strip_prefix(['x', 'X']) {
+                    Some(hex) => u32::from_str_radix(hex, 16).ok(),
+                    None => digits.parse().ok(),
+                })
+                .and_then(char::from_u32),
+        });
+        match (character, entity) {
+            (Some(c), Some(name)) => {
+                decoded.push(c);
+                rest = &rest[name.len() + 2..];
+            }
+            _ => {
+                decoded.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    decoded.push_str(rest);
+    decoded
+}
+
+/// Puts the categories in tree order: each category is followed by its children, and brothers
+/// are sorted by name without regard to case. A category whose parent is not in the list is
+/// shown at the top level, and a loop in the parents cannot make one appear twice.
+fn arrange_categories(raw: Vec<RawCategory>) -> Vec<CategoryItem> {
+    let ids: std::collections::HashSet<u64> = raw.iter().map(|category| category.id).collect();
+    let mut children: std::collections::HashMap<u64, Vec<(String, u64, String)>> =
+        std::collections::HashMap::new();
+    for category in raw {
+        let name = decode_entities(&category.name);
+        let parent = if ids.contains(&category.parent) && category.parent != category.id {
+            category.parent
+        } else {
+            0
+        };
+        children
+            .entry(parent)
+            .or_default()
+            .push((name.to_lowercase(), category.id, name));
+    }
+    for siblings in children.values_mut() {
+        siblings.sort();
+    }
+
+    let mut arranged = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    // Depth-first, taking the first brother off the front of each level.
+    let mut stack: Vec<(u64, usize)> = children
+        .get(&0)
+        .into_iter()
+        .flatten()
+        .rev()
+        .map(|(_, id, _)| (*id, 0))
+        .collect();
+    let names: std::collections::HashMap<u64, String> = children
+        .values()
+        .flatten()
+        .map(|(_, id, name)| (*id, name.clone()))
+        .collect();
+    while let Some((id, depth)) = stack.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        arranged.push(CategoryItem {
+            id,
+            name: names[&id].clone(),
+            depth,
+        });
+        for (_, child, _) in children.get(&id).into_iter().flatten().rev() {
+            stack.push((*child, depth + 1));
+        }
+    }
+    arranged
+}
+
+/// Lists the categories of the site in tree order, for the window to offer. It reads them page by
+/// page, up to a hundred at a time.
+pub fn list_categories<S: CredentialsStore, H: WpHttp>(
+    store: &S,
+    http: &H,
+) -> Result<Vec<CategoryItem>, WordPressError> {
+    let credentials = store.load()?.ok_or(WordPressError::NoSettings)?;
+    let authorization = credentials.authorization();
+    let site = credentials.site.as_str();
+
+    let mut all = Vec::new();
+    for page in 1..=MAX_CATEGORY_PAGES {
+        let url = format!(
+            "{site}/wp-json/wp/v2/categories?per_page={CATEGORY_PAGE_SIZE}&page={page}&_fields=id,name,parent"
+        );
+        let body = match success_body(http.get(&url, &[("Authorization", &authorization)])?) {
+            Ok(body) => body,
+            // Asking for the page after the last one is an error in WordPress; here it only
+            // means there are no more.
+            Err(WordPressError::Api { code, .. })
+                if page > 1 && code == "rest_post_invalid_page_number" =>
+            {
+                break
+            }
+            Err(error) => return Err(error),
+        };
+        let batch: Vec<RawCategory> =
+            serde_json::from_str(&body).map_err(|e| WordPressError::Malformed(e.to_string()))?;
+        let last = batch.len() < CATEGORY_PAGE_SIZE;
+        all.extend(batch);
+        if last {
+            break;
+        }
+    }
+    Ok(arrange_categories(all))
 }
 
 /// The post that was created.
@@ -372,6 +535,9 @@ pub fn create_draft<H: WpHttp>(
     }
     if let Some(slug) = draft.slug() {
         body["slug"] = slug.into();
+    }
+    if !draft.categories().is_empty() {
+        body["categories"] = draft.categories().into();
     }
     let mut meta = serde_json::Map::new();
     if let Some(description) = draft.meta_description() {
@@ -464,6 +630,21 @@ pub(crate) mod tests {
                     .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
                     .collect(),
                 body.to_vec(),
+            ));
+            self.answers
+                .borrow_mut()
+                .pop_front()
+                .expect("the test queued an answer for every request")
+        }
+
+        fn get(&self, url: &str, headers: &[(&str, &str)]) -> Result<HttpResponse, WordPressError> {
+            self.sent.borrow_mut().push((
+                url.to_owned(),
+                headers
+                    .iter()
+                    .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                    .collect(),
+                Vec::new(),
             ));
             self.answers
                 .borrow_mut()
@@ -705,6 +886,261 @@ pub(crate) mod tests {
         let post = create_draft(&site, &credentials(), &full_seo_draft()).unwrap();
         assert_eq!(post.meta_description_saved, Some(true));
         assert_eq!(post.focus_keyphrase_saved, Some(false));
+    }
+
+    fn raw(id: u64, name: &str, parent: u64) -> RawCategory {
+        RawCategory {
+            id,
+            name: name.into(),
+            parent,
+        }
+    }
+
+    fn item(id: u64, name: &str, depth: usize) -> CategoryItem {
+        CategoryItem {
+            id,
+            name: name.into(),
+            depth,
+        }
+    }
+
+    #[test]
+    fn entities_in_a_category_name_are_decoded() {
+        for (raw, decoded) in [
+            ("Lemon &amp; Limes", "Lemon & Limes"),
+            ("Platos &lt;principales&gt;", "Platos <principales>"),
+            (
+                "&quot;Cocina&quot; &#8217;casera&#8217;",
+                "\"Cocina\" \u{2019}casera\u{2019}",
+            ),
+            ("It&#039;s &#x1F49A;", "It's \u{1F49A}"),
+            ("a&nbsp;b", "a\u{a0}b"),
+            ("Postres veganos", "Postres veganos"),
+            ("Recetas rápidas", "Recetas rápidas"),
+            ("", ""),
+        ] {
+            assert_eq!(decode_entities(raw), decoded, "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn what_is_not_an_entity_is_left_alone() {
+        for text in [
+            "Tom & Jerry",
+            "a &unknown; b",
+            "&",
+            "&;",
+            "&#;",
+            "&#xZZ;",
+            "&#99999999999;",
+            "&amp",
+            "x &#1114112; y",
+        ] {
+            assert_eq!(decode_entities(text), text, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn categories_come_in_tree_order_with_their_depth() {
+        let arranged = arrange_categories(vec![
+            raw(3, "Tartas veganas", 2),
+            raw(1, "Vegan Lifestyle", 0),
+            raw(2, "Postres veganos", 0),
+            raw(4, "Batidos veganos", 2),
+            raw(5, "Recetas veganas para navidad", 0),
+            raw(6, "helados veganos", 2),
+            raw(7, "Sin categoría", 0),
+            raw(8, "Tartas de queso", 3),
+        ]);
+        assert_eq!(
+            arranged,
+            vec![
+                item(2, "Postres veganos", 0),
+                item(4, "Batidos veganos", 1),
+                item(6, "helados veganos", 1),
+                item(3, "Tartas veganas", 1),
+                item(8, "Tartas de queso", 2),
+                item(5, "Recetas veganas para navidad", 0),
+                item(7, "Sin categoría", 0),
+                item(1, "Vegan Lifestyle", 0),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_category_whose_parent_is_missing_is_shown_at_the_top() {
+        let arranged = arrange_categories(vec![raw(1, "Huérfana", 99), raw(2, "Otra", 0)]);
+        assert_eq!(arranged, vec![item(1, "Huérfana", 0), item(2, "Otra", 0)]);
+    }
+
+    #[test]
+    fn a_loop_in_the_parents_cannot_repeat_or_hang() {
+        let arranged = arrange_categories(vec![
+            raw(1, "A", 2),
+            raw(2, "B", 1),
+            raw(3, "Sola", 3),
+            raw(4, "Normal", 0),
+        ]);
+        let ids: Vec<u64> = arranged.iter().map(|c| c.id).collect();
+        let mut unique = ids.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(ids.len(), unique.len(), "{ids:?}");
+        assert!(ids.contains(&4));
+    }
+
+    #[test]
+    fn names_with_entities_are_decoded_and_sorted_by_what_they_say() {
+        let arranged = arrange_categories(vec![raw(1, "Lemon &amp; Limes", 0), raw(2, "Ajo", 0)]);
+        assert_eq!(
+            arranged,
+            vec![item(2, "Ajo", 0), item(1, "Lemon & Limes", 0)]
+        );
+    }
+
+    #[test]
+    fn no_categories_is_an_empty_list() {
+        assert_eq!(arrange_categories(vec![]), vec![]);
+    }
+
+    struct SavedSettings;
+
+    impl CredentialsStore for SavedSettings {
+        fn load(&self) -> Result<Option<WpCredentials>, WordPressError> {
+            Ok(Some(credentials()))
+        }
+        fn save(&self, _: &WpCredentials) -> Result<(), WordPressError> {
+            Ok(())
+        }
+        fn clear(&self) -> Result<(), WordPressError> {
+            Ok(())
+        }
+    }
+
+    struct NoSettingsSaved;
+
+    impl CredentialsStore for NoSettingsSaved {
+        fn load(&self) -> Result<Option<WpCredentials>, WordPressError> {
+            Ok(None)
+        }
+        fn save(&self, _: &WpCredentials) -> Result<(), WordPressError> {
+            Ok(())
+        }
+        fn clear(&self) -> Result<(), WordPressError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn the_categories_are_read_with_the_credentials_and_arranged() {
+        let site = FakeSite::new(vec![answer(
+            200,
+            r#"[{"id":2,"name":"Postres veganos","parent":0},
+                {"id":4,"name":"Batidos veganos","parent":2},
+                {"id":9,"name":"Lemon &amp; Limes","parent":0}]"#,
+        )]);
+        let list = list_categories(&SavedSettings, &site).unwrap();
+        assert_eq!(
+            list,
+            vec![
+                item(9, "Lemon & Limes", 0),
+                item(2, "Postres veganos", 0),
+                item(4, "Batidos veganos", 1),
+            ]
+        );
+        let sent = site.sent.borrow();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(
+            sent[0].0,
+            "https://recetas.test/wp-json/wp/v2/categories?per_page=100&page=1&_fields=id,name,parent"
+        );
+        let expected = format!("Basic {}", STANDARD.encode("aida:abcdefghijklmnop"));
+        assert_eq!(header(&sent[0], "Authorization"), Some(expected.as_str()));
+    }
+
+    #[test]
+    fn a_full_page_asks_for_the_next_one() {
+        let page = |from: u64, count: u64| {
+            let items: Vec<String> = (from..from + count)
+                .map(|id| format!(r#"{{"id":{id},"name":"Cat {id:03}","parent":0}}"#))
+                .collect();
+            format!("[{}]", items.join(","))
+        };
+        let site = FakeSite::new(vec![answer(200, &page(1, 100)), answer(200, &page(101, 5))]);
+        let list = list_categories(&SavedSettings, &site).unwrap();
+        assert_eq!(list.len(), 105);
+        let sent = site.sent.borrow();
+        assert_eq!(sent.len(), 2);
+        assert!(sent[1].0.contains("page=2"));
+    }
+
+    #[test]
+    fn a_site_with_exactly_one_full_page_ends_when_wordpress_refuses_the_next() {
+        let items: Vec<String> = (1..=100)
+            .map(|id| format!(r#"{{"id":{id},"name":"Cat {id:03}","parent":0}}"#))
+            .collect();
+        let site = FakeSite::new(vec![
+            answer(200, &format!("[{}]", items.join(","))),
+            answer(
+                400,
+                r#"{"code":"rest_post_invalid_page_number","message":"La p\u00e1gina no existe."}"#,
+            ),
+        ]);
+        let list = list_categories(&SavedSettings, &site).unwrap();
+        assert_eq!(list.len(), 100);
+    }
+
+    #[test]
+    fn a_wordpress_error_on_the_first_page_is_reported() {
+        let site = FakeSite::new(vec![answer(
+            401,
+            r#"{"code":"incorrect_password","message":"Contraseña incorrecta."}"#,
+        )]);
+        assert_eq!(
+            list_categories(&SavedSettings, &site),
+            Err(WordPressError::Api {
+                code: "incorrect_password".into(),
+                message: "Contraseña incorrecta.".into()
+            })
+        );
+    }
+
+    #[test]
+    fn listing_without_settings_does_not_call_out() {
+        let site = FakeSite::new(vec![]);
+        assert_eq!(
+            list_categories(&NoSettingsSaved, &site),
+            Err(WordPressError::NoSettings)
+        );
+        assert!(site.sent.borrow().is_empty());
+    }
+
+    #[test]
+    fn an_answer_that_is_not_a_list_is_malformed() {
+        let site = FakeSite::new(vec![answer(200, r#"{"not":"a list"}"#)]);
+        assert!(matches!(
+            list_categories(&SavedSettings, &site),
+            Err(WordPressError::Malformed(_))
+        ));
+    }
+
+    #[test]
+    fn the_chosen_categories_go_in_the_post() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":1}"#)]);
+        let draft = draft().with_categories(&[7, 3]).unwrap();
+        create_draft(&site, &credentials(), &draft).unwrap();
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert_eq!(body["categories"], serde_json::json!([7, 3]));
+    }
+
+    #[test]
+    fn without_categories_the_post_leaves_the_choice_to_wordpress() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":1}"#)]);
+        create_draft(&site, &credentials(), &draft()).unwrap();
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert!(body.get("categories").is_none());
     }
 
     #[test]

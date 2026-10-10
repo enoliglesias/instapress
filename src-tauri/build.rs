@@ -5,13 +5,16 @@ const COMMANDS: &[&str] = &[
     "classify_instagram_url",
     "prepare_draft",
     "suggest_slug",
-    "has_token",
+    "token_status",
     "save_token",
+    "refresh_token",
+    "renew_token_if_due",
     "clear_token",
     "list_posts",
     "get_wordpress_settings",
     "save_wordpress_settings",
     "clear_wordpress_settings",
+    "list_categories",
     "create_wordpress_draft",
 ];
 

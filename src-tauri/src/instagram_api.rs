@@ -11,6 +11,13 @@ use crate::http::{HttpResponse, UreqClient};
 use crate::token::{AccessToken, TokenError, TokenStore};
 
 const MEDIA_URL: &str = "https://graph.instagram.com/me/media";
+const REFRESH_URL: &str = "https://graph.instagram.com/refresh_access_token";
+/// A token that was just generated in the Meta panel lasts about this long; the app assumes it
+/// when the user pastes one, because Instagram does not say how old a pasted token is. A day is
+/// taken off so a token is never believed to last longer than it does.
+const ASSUMED_TOKEN_LIFETIME_SECS: u64 = 59 * 24 * 60 * 60;
+/// A token is renewed when it has less than this left (or when nobody knows how long it has).
+const RENEW_WITHIN_SECS: u64 = 30 * 24 * 60 * 60;
 const MEDIA_FIELDS: &str = "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp";
 
 /// Why the recent posts could not be listed. No variant ever carries the access token.
@@ -202,6 +209,131 @@ pub fn list_recent_posts<S: TokenStore, H: HttpGet>(
         .into_iter()
         .map(Post::from)
         .collect())
+}
+
+/// What the window shows about the saved token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct TokenStatus {
+    pub has_token: bool,
+    /// When the token stops working, in seconds since 1970; `None` when nobody knows.
+    pub expires_at: Option<u64>,
+}
+
+/// Saves a token the user has just pasted, assuming it is fresh (see
+/// [`ASSUMED_TOKEN_LIFETIME_SECS`]).
+pub fn store_new_token<S: TokenStore>(
+    store: &S,
+    token: &AccessToken,
+    now: u64,
+) -> Result<(), TokenError> {
+    store.save(token)?;
+    store.save_expiry(now.saturating_add(ASSUMED_TOKEN_LIFETIME_SECS))
+}
+
+/// Whether there is a saved token and when it expires.
+pub fn token_status<S: TokenStore>(store: &S) -> Result<TokenStatus, TokenError> {
+    Ok(match store.load()? {
+        Some(_) => TokenStatus {
+            has_token: true,
+            expires_at: store.expires_at()?,
+        },
+        None => TokenStatus {
+            has_token: false,
+            expires_at: None,
+        },
+    })
+}
+
+/// Whether a token should be renewed now: when it has less than 30 days left, when it has
+/// already expired, or when nobody knows. A token that has expired cannot be renewed, but trying
+/// is what tells the user so.
+pub fn renewal_due(expires_at: Option<u64>, now: u64) -> bool {
+    expires_at.is_none_or(|expires_at| expires_at <= now.saturating_add(RENEW_WITHIN_SECS))
+}
+
+/// What Instagram answers when a token is renewed.
+#[derive(Deserialize)]
+struct RefreshResponse {
+    access_token: Option<String>,
+    expires_in: Option<u64>,
+    error: Option<ErrorBody>,
+}
+
+fn parse_refresh(status: u16, body: &str) -> Result<(AccessToken, u64), ApiError> {
+    match serde_json::from_str::<RefreshResponse>(body) {
+        Ok(RefreshResponse {
+            error: Some(error), ..
+        }) => Err(ApiError::Api {
+            code: error.code,
+            message: error.message,
+        }),
+        _ if !(200..300).contains(&status) => Err(ApiError::Status(status)),
+        Ok(RefreshResponse {
+            access_token: Some(token),
+            expires_in: Some(seconds),
+            ..
+        }) if seconds > 0 => Ok((AccessToken::new(&token)?, seconds)),
+        Ok(_) => Err(ApiError::Malformed(
+            "the answer has no new token or no lifetime".into(),
+        )),
+        Err(e) => Err(ApiError::Malformed(e.to_string())),
+    }
+}
+
+/// Asks Instagram for a new 60-day token in exchange for the saved one, and saves it with its
+/// expiry. Instagram only renews a token that is at least a day old and has not expired.
+///
+/// This endpoint is documented with the token as a query parameter, so here it goes in the
+/// query as well as in the header; it never appears in an error.
+pub fn refresh_token<S: TokenStore, H: HttpGet>(
+    store: &S,
+    http: &H,
+    now: u64,
+) -> Result<TokenStatus, ApiError> {
+    let token = store.load()?.ok_or(ApiError::MissingToken)?;
+    let response = http.get(
+        REFRESH_URL,
+        &[
+            ("grant_type", "ig_refresh_token"),
+            ("access_token", token.expose()),
+        ],
+        token.expose(),
+    )?;
+    let (renewed, seconds) = parse_refresh(response.status, &response.body)?;
+    store.save(&renewed)?;
+    let expires_at = now.saturating_add(seconds);
+    store.save_expiry(expires_at)?;
+    Ok(TokenStatus {
+        has_token: true,
+        expires_at: Some(expires_at),
+    })
+}
+
+/// What happened when the app looked at the token on start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct RenewalOutcome {
+    pub renewed: bool,
+    pub status: TokenStatus,
+}
+
+/// Renews the token if it is due (see [`renewal_due`]) and leaves it alone otherwise. Having no
+/// token is not an error here.
+pub fn renew_token_if_due<S: TokenStore, H: HttpGet>(
+    store: &S,
+    http: &H,
+    now: u64,
+) -> Result<RenewalOutcome, ApiError> {
+    let status = token_status(store)?;
+    if !status.has_token || !renewal_due(status.expires_at, now) {
+        return Ok(RenewalOutcome {
+            renewed: false,
+            status,
+        });
+    }
+    Ok(RenewalOutcome {
+        renewed: true,
+        status: refresh_token(store, http, now)?,
+    })
 }
 
 #[cfg(test)]
@@ -461,6 +593,202 @@ mod tests {
             fetch_recent_media(&http, &token(), 5),
             Err(ApiError::Status(302))
         ));
+    }
+
+    const NOW: u64 = 1_800_000_000;
+    const DAY: u64 = 24 * 60 * 60;
+    const REFRESHED: &str =
+        r#"{"access_token":"IGAAnew","token_type":"bearer","expires_in":5183944}"#;
+
+    fn store_with(token: &str, expires_at: Option<u64>) -> MemoryStore {
+        let store = MemoryStore::default();
+        store.save(&AccessToken::new(token).unwrap()).unwrap();
+        if let Some(at) = expires_at {
+            store.save_expiry(at).unwrap();
+        }
+        store
+    }
+
+    #[test]
+    fn a_pasted_token_is_assumed_fresh_and_a_day_short_of_sixty() {
+        let store = MemoryStore::default();
+        store_new_token(&store, &token(), NOW).unwrap();
+        assert_eq!(store.load().unwrap(), Some(token()));
+        assert_eq!(store.expires_at().unwrap(), Some(NOW + 59 * DAY));
+    }
+
+    #[test]
+    fn the_status_says_whether_there_is_a_token_and_when_it_expires() {
+        let empty = MemoryStore::default();
+        assert_eq!(
+            token_status(&empty),
+            Ok(TokenStatus {
+                has_token: false,
+                expires_at: None
+            })
+        );
+        let with = store_with("IGAAtoken", Some(NOW + 40 * DAY));
+        assert_eq!(
+            token_status(&with),
+            Ok(TokenStatus {
+                has_token: true,
+                expires_at: Some(NOW + 40 * DAY)
+            })
+        );
+        let unknown = store_with("IGAAtoken", None);
+        assert_eq!(token_status(&unknown).unwrap().expires_at, None);
+    }
+
+    #[test]
+    fn a_token_is_due_for_renewal_with_under_thirty_days_left_or_when_unknown() {
+        assert!(renewal_due(None, NOW));
+        assert!(renewal_due(Some(NOW - DAY), NOW), "already expired");
+        assert!(renewal_due(Some(NOW), NOW));
+        assert!(
+            renewal_due(Some(NOW + 30 * DAY), NOW),
+            "exactly thirty days"
+        );
+        assert!(!renewal_due(Some(NOW + 30 * DAY + 1), NOW));
+        assert!(!renewal_due(Some(NOW + 59 * DAY), NOW));
+    }
+
+    #[test]
+    fn renewing_saves_the_new_token_and_its_expiry() {
+        let store = store_with("IGAAold", Some(NOW + DAY));
+        let http = FakeHttp::ok(200, REFRESHED);
+        let status = refresh_token(&store, &http, NOW).unwrap();
+        assert_eq!(
+            status,
+            TokenStatus {
+                has_token: true,
+                expires_at: Some(NOW + 5_183_944)
+            }
+        );
+        assert_eq!(
+            store.load().unwrap(),
+            Some(AccessToken::new("IGAAnew").unwrap())
+        );
+        assert_eq!(store.expires_at().unwrap(), Some(NOW + 5_183_944));
+    }
+
+    #[test]
+    fn renewing_asks_the_refresh_endpoint_with_the_saved_token() {
+        let store = store_with("IGAAold", None);
+        let http = FakeHttp::ok(200, REFRESHED);
+        refresh_token(&store, &http, NOW).unwrap();
+        let seen = http.seen.borrow();
+        assert_eq!(
+            seen[0].0,
+            "https://graph.instagram.com/refresh_access_token"
+        );
+        assert!(seen[0]
+            .1
+            .contains(&("grant_type".into(), "ig_refresh_token".into())));
+        assert!(seen[0]
+            .1
+            .contains(&("access_token".into(), "IGAAold".into())));
+        assert_eq!(seen[0].2, "IGAAold");
+    }
+
+    #[test]
+    fn a_renewal_that_fails_leaves_the_saved_token_alone() {
+        for (status, body) in [
+            (
+                400,
+                r#"{"error":{"message":"Cannot refresh a token less than 24 hours old","code":10}}"#,
+            ),
+            (
+                400,
+                r#"{"error":{"message":"Session has expired","code":190}}"#,
+            ),
+            (500, "<html>down</html>"),
+            (200, "<html>nope</html>"),
+            (200, r#"{"access_token":"IGAAnew"}"#),
+            (200, r#"{"expires_in":100}"#),
+            (200, r#"{"access_token":"IGAAnew","expires_in":0}"#),
+            (200, r#"{"access_token":"has space","expires_in":100}"#),
+        ] {
+            let store = store_with("IGAAold", Some(NOW + DAY));
+            let result = refresh_token(&store, &FakeHttp::ok(status, body), NOW);
+            assert!(result.is_err(), "{status} {body}");
+            assert_eq!(
+                store.load().unwrap(),
+                Some(AccessToken::new("IGAAold").unwrap())
+            );
+            assert_eq!(store.expires_at().unwrap(), Some(NOW + DAY));
+        }
+    }
+
+    #[test]
+    fn a_renewal_error_carries_instagrams_message_and_never_the_token() {
+        let store = store_with("IGAAold", None);
+        let http = FakeHttp::ok(
+            400,
+            r#"{"error":{"message":"Cannot refresh a token less than 24 hours old","code":10}}"#,
+        );
+        match refresh_token(&store, &http, NOW) {
+            Err(ApiError::Api { code, message }) => {
+                assert_eq!(code, Some(10));
+                assert!(message.contains("24 hours"));
+                assert!(!message.contains("IGAAold"));
+            }
+            other => panic!("expected an API error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn renewing_without_a_token_asks_for_one_and_does_not_call_out() {
+        let http = FakeHttp::ok(200, REFRESHED);
+        assert!(matches!(
+            refresh_token(&MemoryStore::default(), &http, NOW),
+            Err(ApiError::MissingToken)
+        ));
+        assert!(http.seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_token_that_is_not_due_is_left_alone_without_a_request() {
+        let store = store_with("IGAAold", Some(NOW + 45 * DAY));
+        let http = FakeHttp::ok(200, REFRESHED);
+        let outcome = renew_token_if_due(&store, &http, NOW).unwrap();
+        assert!(!outcome.renewed);
+        assert_eq!(outcome.status.expires_at, Some(NOW + 45 * DAY));
+        assert!(http.seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_token_that_is_due_is_renewed_on_start() {
+        for expires_at in [None, Some(NOW + 10 * DAY), Some(NOW - DAY)] {
+            let store = store_with("IGAAold", expires_at);
+            let http = FakeHttp::ok(200, REFRESHED);
+            let outcome = renew_token_if_due(&store, &http, NOW).unwrap();
+            assert!(outcome.renewed, "{expires_at:?}");
+            assert_eq!(outcome.status.expires_at, Some(NOW + 5_183_944));
+            assert_eq!(http.seen.borrow().len(), 1);
+        }
+    }
+
+    #[test]
+    fn with_no_token_there_is_nothing_to_renew() {
+        let http = FakeHttp::ok(200, REFRESHED);
+        let outcome = renew_token_if_due(&MemoryStore::default(), &http, NOW).unwrap();
+        assert!(!outcome.renewed);
+        assert!(!outcome.status.has_token);
+        assert!(http.seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_failed_renewal_on_start_is_reported_and_keeps_the_old_token() {
+        let store = store_with("IGAAold", None);
+        let http = FakeHttp::ok(
+            400,
+            r#"{"error":{"message":"Cannot refresh a token less than 24 hours old","code":10}}"#,
+        );
+        assert!(renew_token_if_due(&store, &http, NOW).is_err());
+        assert_eq!(
+            store.load().unwrap(),
+            Some(AccessToken::new("IGAAold").unwrap())
+        );
     }
 
     #[test]

@@ -9,6 +9,7 @@ use thiserror::Error;
 
 const KEYRING_SERVICE: &str = "recipe-sync";
 const KEYRING_USER: &str = "instagram-token";
+const KEYRING_EXPIRY_USER: &str = "instagram-token-expiry";
 
 /// Why a token was rejected or could not be stored.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -61,8 +62,12 @@ pub trait TokenStore {
     fn load(&self) -> Result<Option<AccessToken>, TokenError>;
     /// Replaces any saved token.
     fn save(&self, token: &AccessToken) -> Result<(), TokenError>;
-    /// Removing a token that is not there is not an error.
+    /// Removing a token that is not there is not an error. The remembered expiry goes with it.
     fn clear(&self) -> Result<(), TokenError>;
+    /// When the saved token stops working, in seconds since 1970, if it is known.
+    fn expires_at(&self) -> Result<Option<u64>, TokenError>;
+    /// Remembers when the saved token stops working.
+    fn save_expiry(&self, unix_seconds: u64) -> Result<(), TokenError>;
 }
 
 /// One named secret in the OS credential store (Windows Credential Manager, macOS Keychain,
@@ -115,6 +120,7 @@ fn store_error(action: &'static str, error: &keyring::Error) -> TokenError {
 pub struct KeyringStore;
 
 const INSTAGRAM_SECRET: OsSecret = OsSecret::new(KEYRING_USER);
+const INSTAGRAM_EXPIRY: OsSecret = OsSecret::new(KEYRING_EXPIRY_USER);
 
 impl TokenStore for KeyringStore {
     fn load(&self) -> Result<Option<AccessToken>, TokenError> {
@@ -130,7 +136,19 @@ impl TokenStore for KeyringStore {
     }
 
     fn clear(&self) -> Result<(), TokenError> {
-        INSTAGRAM_SECRET.clear("remove the token")
+        INSTAGRAM_SECRET.clear("remove the token")?;
+        INSTAGRAM_EXPIRY.clear("remove the token expiry")
+    }
+
+    fn expires_at(&self) -> Result<Option<u64>, TokenError> {
+        // A value that is not a number counts as unknown: the next renewal writes a good one.
+        Ok(INSTAGRAM_EXPIRY
+            .load("read the token expiry")?
+            .and_then(|raw| raw.trim().parse().ok()))
+    }
+
+    fn save_expiry(&self, unix_seconds: u64) -> Result<(), TokenError> {
+        INSTAGRAM_EXPIRY.save("save the token expiry", &unix_seconds.to_string())
     }
 }
 
@@ -142,7 +160,10 @@ pub(crate) mod tests {
 
     /// In-memory store shared by the tests of the modules that need a [`TokenStore`].
     #[derive(Default)]
-    pub(crate) struct MemoryStore(pub(crate) RefCell<Option<AccessToken>>);
+    pub(crate) struct MemoryStore(
+        pub(crate) RefCell<Option<AccessToken>>,
+        pub(crate) RefCell<Option<u64>>,
+    );
 
     impl TokenStore for MemoryStore {
         fn load(&self) -> Result<Option<AccessToken>, TokenError> {
@@ -154,6 +175,14 @@ pub(crate) mod tests {
         }
         fn clear(&self) -> Result<(), TokenError> {
             *self.0.borrow_mut() = None;
+            *self.1.borrow_mut() = None;
+            Ok(())
+        }
+        fn expires_at(&self) -> Result<Option<u64>, TokenError> {
+            Ok(*self.1.borrow())
+        }
+        fn save_expiry(&self, unix_seconds: u64) -> Result<(), TokenError> {
+            *self.1.borrow_mut() = Some(unix_seconds);
             Ok(())
         }
     }
@@ -192,5 +221,16 @@ pub(crate) mod tests {
         assert_eq!(store.load(), Ok(Some(token)));
         store.clear().unwrap();
         assert_eq!(store.load(), Ok(None));
+    }
+
+    #[test]
+    fn memory_store_remembers_the_expiry_and_forgets_it_with_the_token() {
+        let store = MemoryStore::default();
+        assert_eq!(store.expires_at(), Ok(None));
+        store.save(&AccessToken::new("IGAAabc").unwrap()).unwrap();
+        store.save_expiry(1_800_000_000).unwrap();
+        assert_eq!(store.expires_at(), Ok(Some(1_800_000_000)));
+        store.clear().unwrap();
+        assert_eq!(store.expires_at(), Ok(None));
     }
 }

@@ -19,6 +19,8 @@ const META_DESCRIPTION_SUGGESTION_CHARS: usize = 155;
 const MAX_META_DESCRIPTION_CHARS: usize = 300;
 /// A focus keyphrase is a few words; this leaves room for a long one.
 const MAX_FOCUS_KEYPHRASE_CHARS: usize = 100;
+/// More categories than this on one post is a mistake.
+const MAX_CATEGORIES: usize = 20;
 
 const ALLOWED_TAGS: [&str; 14] = [
     "p",
@@ -50,6 +52,8 @@ pub enum DraftError {
     MetaDescriptionTooLong { length: usize, max: usize },
     #[error("the focus keyphrase has {length} characters; the limit is {max}")]
     FocusKeyphraseTooLong { length: usize, max: usize },
+    #[error("{count} categories are chosen; the limit is {max}")]
+    TooManyCategories { count: usize, max: usize },
 }
 
 /// The titles of the sections of a recipe, as they are written once accents and case are folded
@@ -447,6 +451,7 @@ pub struct RecipeDraft {
     slug: Option<String>,
     meta_description: Option<String>,
     focus_keyphrase: Option<String>,
+    categories: Vec<u64>,
 }
 
 impl RecipeDraft {
@@ -485,6 +490,7 @@ impl RecipeDraft {
             slug: None,
             meta_description: None,
             focus_keyphrase: None,
+            categories: Vec::new(),
         })
     }
 
@@ -544,6 +550,25 @@ impl RecipeDraft {
         Ok(self)
     }
 
+    /// Sets the categories by their WordPress ids. An id that is repeated or is 0 is dropped.
+    /// With none, WordPress puts the post in its default category.
+    pub fn with_categories(mut self, ids: &[u64]) -> Result<Self, DraftError> {
+        let mut unique: Vec<u64> = Vec::new();
+        for &id in ids {
+            if id != 0 && !unique.contains(&id) {
+                unique.push(id);
+            }
+        }
+        if unique.len() > MAX_CATEGORIES {
+            return Err(DraftError::TooManyCategories {
+                count: unique.len(),
+                max: MAX_CATEGORIES,
+            });
+        }
+        self.categories = unique;
+        Ok(self)
+    }
+
     pub fn slug(&self) -> Option<&str> {
         self.slug.as_deref()
     }
@@ -554,6 +579,10 @@ impl RecipeDraft {
 
     pub fn focus_keyphrase(&self) -> Option<&str> {
         self.focus_keyphrase.as_deref()
+    }
+
+    pub fn categories(&self) -> &[u64] {
+        &self.categories
     }
 
     pub fn image(&self) -> Option<&Image> {
@@ -881,6 +910,7 @@ mod tests {
         assert_eq!(draft.focus_keyphrase(), Some("tarta de queso vegana"));
         let draft = draft.with_focus_keyphrase(" \n ").unwrap();
         assert_eq!(draft.focus_keyphrase(), None);
+        assert!(draft.categories().is_empty());
     }
 
     #[test]
@@ -893,6 +923,29 @@ mod tests {
                 length: 101,
                 max: 100
             })
+        );
+    }
+
+    #[test]
+    fn a_draft_keeps_its_categories_without_repeats_or_zeros() {
+        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>")
+            .unwrap()
+            .with_categories(&[7, 3, 7, 0, 12, 3])
+            .unwrap();
+        assert_eq!(draft.categories(), [7, 3, 12]);
+        let draft = draft.with_categories(&[]).unwrap();
+        assert!(draft.categories().is_empty());
+    }
+
+    #[test]
+    fn too_many_categories_are_rejected() {
+        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        let twenty: Vec<u64> = (1..=20).collect();
+        assert!(draft.clone().with_categories(&twenty).is_ok());
+        let twenty_one: Vec<u64> = (1..=21).collect();
+        assert_eq!(
+            draft.with_categories(&twenty_one),
+            Err(DraftError::TooManyCategories { count: 21, max: 20 })
         );
     }
 
