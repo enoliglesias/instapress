@@ -16,12 +16,15 @@ Living snapshot of the current state of `instapress`, structured with C4 and Dia
 - **`domain/`**
   - [`instagram-url.md`](domain/instagram-url.md): how an Instagram URL is classified as a profile, post or reel, and which inputs are rejected.
   - [`instagram-api.md`](domain/instagram-api.md): reading the user's own recent posts through the Instagram API, the access token and where it is stored, the post model and the errors.
-  - [`recipe-draft.md`](domain/recipe-draft.md): the draft (title, sanitized HTML body, image), caption to HTML and the three image choices.
+  - [`publication-draft.md`](domain/publication-draft.md): the draft (title, sanitized HTML body, image), caption to HTML and the three image choices.
   - [`wordpress.md`](domain/wordpress.md): WordPress credentials, how a post and its image are created, and the errors.
 - **`adr/`**
   - [`0001-use-rust-and-tauri-v2.md`](adr/0001-use-rust-and-tauri-v2.md)
   - [`0002-static-frontend-without-node.md`](adr/0002-static-frontend-without-node.md)
   - [`0003-sanitize-html-with-ammonia.md`](adr/0003-sanitize-html-with-ammonia.md)
+- **`how-to/`**
+  - [`get-started.md`](how-to/get-started.md): everything to set up before the first draft: the Instagram token, the WordPress Application Password, the `.htaccess` rule, the Yoast snippet, the first run and a table of common errors.
 - **`operational/`**
   - [`yoast-meta-description.md`](operational/yoast-meta-description.md): why the Yoast meta description and focus keyphrase need a one-time snippet on the WordPress site, the snippet, and how the app notices when a field was not kept.
+  - [`releasing.md`](operational/releasing.md): how the Windows installer is built and released by GitHub Actions, and the checks that run on every push.
   - [`development-workflow.md`](operational/development-workflow.md): TDD, quality gates, constraints.

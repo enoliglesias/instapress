@@ -9,11 +9,15 @@ Desktop app (Rust and Tauri v2) that turns one of your own Instagram publication
 
 ## Status
 
-Working end to end for the first 25 posts of the connected account. Not implemented yet: token refresh, more than 25 posts, screenshots of a post, categories and tags, and publishing directly.
+Working end to end for the first 25 posts of the connected account. Not implemented yet: more than 25 posts, screenshots of a post, tags, and publishing directly.
 
 Instagram has no official API for reading other people's public posts, so the app only reads the account that owns the token (an Instagram professional account that is a tester of your Meta app). Only publish content you own or have permission to use.
 
 Your Instagram token and your WordPress Application Password are kept in the operating system's credential store (Windows Credential Manager, macOS Keychain, Secret Service). The post text is cleaned before it is sent, so pasted scripts and odd markup never reach your site.
+
+## Setup
+
+Before the first run you need an Instagram token, a WordPress Application Password and two small changes on the site. The step-by-step guide is in [`knowledge/how-to/get-started.md`](knowledge/how-to/get-started.md).
 
 ## Development
 
