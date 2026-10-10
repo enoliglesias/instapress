@@ -13,7 +13,7 @@ The app creates a post on the user's own WordPress site through its REST API (`/
 - `AppPassword` is a newtype with a redacted `Debug`. All whitespace is removed because WordPress shows the password in groups.
 - The user name is trimmed, may not be empty and may not contain a colon (the separator of HTTP Basic).
 - Lengths are capped (`TooLong`): 200 characters for the address and the password, 100 for the user name. The OS credential store would refuse much larger values with an opaque error.
-- The three values are stored together as one JSON secret `{ "site", "username", "app_password" }` in the OS credential store (service `recipe-sync`, user `wordpress`). Reading the settings from the frontend (`get_wordpress_settings`) returns the site, the user name and whether a password exists, never the password. A stored value that no longer validates counts as no settings.
+- The three values are stored together as one JSON secret `{ "site", "username", "app_password" }` in the OS credential store (service `instapress`, user `wordpress`). Reading the settings from the frontend (`get_wordpress_settings`) returns the site, the user name and whether a password exists, never the password. A stored value that no longer validates counts as no settings.
 - The address is typed by the user, so it is not restricted to public hosts; the credentials go to whatever address is saved.
 
 Settings errors (`SettingsError`): `EmptySite`, `InvalidSite`, `EmptyUsername`, `UsernameHasColon`, `EmptyPassword`, `TooLong`.

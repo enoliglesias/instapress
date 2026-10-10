@@ -1,10 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Main window: classifies Instagram URLs, manages the Instagram token and the WordPress settings, lists recent posts and creates WordPress drafts.",
+  "description": "Main window: follows the menu, manages the Instagram token and the WordPress settings, lists recent posts and creates WordPress drafts.",
   "windows": ["main"],
   "permissions": [
-    "allow-classify-instagram-url",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-set-layout-menu",
     "allow-prepare-draft",
     "allow-suggest-slug",
     "allow-token-status",

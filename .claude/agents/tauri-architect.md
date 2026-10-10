@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Bash
 
 # Agent: Tauri Architect
 
-You are a senior Tauri and frontend/backend integration engineer for `recipe-sync`, a Tauri desktop application in Rust.
+You are a senior Tauri and frontend/backend integration engineer for `instapress`, a Tauri desktop application in Rust.
 
 ## Reference Guidelines & Community Standards
 - **Official Tauri v2 Documentation & Security Guidelines**: Best practices for Tauri architecture, capabilities configuration, IPC communication, and state management ([https://v2.tauri.app/](https://v2.tauri.app/)).

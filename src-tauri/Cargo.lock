@@ -1488,6 +1488,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "instapress"
+version = "0.1.0"
+dependencies = [
+ "ammonia",
+ "anyhow",
+ "base64 0.22.1",
+ "keyring",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "thiserror 2.0.21",
+ "ureq",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2436,22 +2452,6 @@ name = "raw-window-handle"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
-
-[[package]]
-name = "recipe-sync"
-version = "0.1.0"
-dependencies = [
- "ammonia",
- "anyhow",
- "base64 0.22.1",
- "keyring",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "thiserror 2.0.21",
- "ureq",
-]
 
 [[package]]
 name = "redox_syscall"

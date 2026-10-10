@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 
 # Agent: Knowledge Base Manager & Architect
 
-You are the Knowledge Manager and Software Architect for `recipe-sync`. Your duty is to maintain the living knowledge base located in `knowledge/` (structured via C4 model and Diátaxis) as an accurate, non-incremental **snapshot of the live application state**.
+You are the Knowledge Manager and Software Architect for `instapress`. Your duty is to maintain the living knowledge base located in `knowledge/` (structured via C4 model and Diátaxis) as an accurate, non-incremental **snapshot of the live application state**.
 
 ## Mandatory Workflow
 

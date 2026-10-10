@@ -7,7 +7,7 @@ use std::fmt;
 
 use thiserror::Error;
 
-const KEYRING_SERVICE: &str = "recipe-sync";
+const KEYRING_SERVICE: &str = "instapress";
 const KEYRING_USER: &str = "instagram-token";
 const KEYRING_EXPIRY_USER: &str = "instagram-token-expiry";
 
@@ -71,7 +71,7 @@ pub trait TokenStore {
 }
 
 /// One named secret in the OS credential store (Windows Credential Manager, macOS Keychain,
-/// Secret Service), under the `recipe-sync` service. Not unit-tested: it needs a real OS session.
+/// Secret Service), under the `instapress` service. Not unit-tested: it needs a real OS session.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct OsSecret(&'static str);
 

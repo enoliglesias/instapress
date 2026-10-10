@@ -7,7 +7,7 @@ const TYPE_LABEL = { IMAGE: "Photo", VIDEO: "Reel or video", CAROUSEL_ALBUM: "Al
 
 // Errors are announced at once (`alert`), everything else politely (`status`).
 function show(element, text, isError = false) {
-  element.className = isError ? "error" : "";
+  element.classList.toggle("error", isError);
   element.setAttribute("role", isError ? "alert" : "status");
   element.textContent = text;
 }
@@ -16,17 +16,94 @@ function formatSize(bytes) {
   return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-function describe(target) {
-  switch (target.kind) {
-    case "profile":
-      return `Profile @${target.username}`;
-    case "post":
-      return `Post ${target.shortcode}`;
-    case "reel":
-      return `Reel ${target.shortcode}`;
-    default:
-      return "Unknown target";
+// --- Layout ---
+// The View > 2 columns item of the menu chooses between one column and two. The choice is
+// remembered by the window and the menu is told on start, so its check mark agrees.
+
+const LAYOUT_KEY = "instapress-layout";
+
+function applyLayout(twoColumns) {
+  document.documentElement.dataset.layout = twoColumns ? "two" : "one";
+}
+
+function savedLayout() {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === "two";
+  } catch {
+    // Storage may be unavailable; the window then opens in one column each time.
+    return false;
   }
+}
+
+function rememberLayout(twoColumns) {
+  try {
+    localStorage.setItem(LAYOUT_KEY, twoColumns ? "two" : "one");
+  } catch {
+    // Not remembering the choice is harmless.
+  }
+}
+
+applyLayout(savedLayout());
+invoke("set_layout_menu", { twoColumns: savedLayout() }).catch(() => {});
+window.__TAURI__.event.listen("layout", (event) => {
+  const twoColumns = Boolean(event.payload);
+  applyLayout(twoColumns);
+  rememberLayout(twoColumns);
+});
+
+// --- About ---
+
+window.__TAURI__.event.listen("about", (event) => {
+  $("about-version").textContent = `version ${event.payload}`;
+  $("about").showModal();
+});
+
+$("about-close").addEventListener("click", () => $("about").close());
+
+// --- Tabs ---
+
+const TAB_NAMES = ["credentials", "editing"];
+
+function selectTab(name, { focus = false } = {}) {
+  for (const tabName of TAB_NAMES) {
+    const selected = tabName === name;
+    const tab = $(`tab-${tabName}`);
+    tab.setAttribute("aria-selected", String(selected));
+    // Only the selected tab is a tab stop; the arrow keys move between the tabs.
+    tab.tabIndex = selected ? 0 : -1;
+    $(`panel-${tabName}`).hidden = !selected;
+    if (selected && focus) tab.focus();
+  }
+}
+
+for (const tab of document.querySelectorAll('[role="tab"]')) {
+  tab.addEventListener("click", () => selectTab(tab.dataset.tab));
+  tab.addEventListener("keydown", (event) => {
+    const index = TAB_NAMES.indexOf(tab.dataset.tab);
+    let next = null;
+    if (event.key === "ArrowRight") next = (index + 1) % TAB_NAMES.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + TAB_NAMES.length) % TAB_NAMES.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = TAB_NAMES.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    selectTab(TAB_NAMES[next], { focus: true });
+  });
+}
+
+$("go-credentials").addEventListener("click", () => selectTab("credentials", { focus: true }));
+
+// What is missing before the app can work. The Credenciales tab shows a mark while any is.
+const setup = { token: false, tokenExpired: false, wordpress: false };
+
+function updateCredentialsAlert() {
+  $("credentials-alert").hidden = setup.token && !setup.tokenExpired && setup.wordpress;
+}
+
+// Without a token the list of posts has nothing to show; say what to do instead.
+function showPostsSetup(needed) {
+  $("posts-setup").hidden = !needed;
+  $("posts-refresh").disabled = needed;
 }
 
 // --- Instagram access ---
@@ -51,9 +128,14 @@ async function refreshTokenStatus() {
         : "No token saved yet.",
     );
     $("token-renew").disabled = !status.has_token;
+    setup.token = status.has_token;
+    setup.tokenExpired = Boolean(status.has_token && status.expires_at && status.expires_at * 1000 < Date.now());
+    updateCredentialsAlert();
     return status.has_token;
   } catch (message) {
     show($("token-status"), String(message), true);
+    setup.token = false;
+    updateCredentialsAlert();
     return false;
   }
 }
@@ -67,6 +149,7 @@ $("token-form").addEventListener("submit", async (event) => {
     await invoke("save_token", { token });
     show($("token-message"), "Token saved.");
     await refreshTokenStatus();
+    showPostsSetup(false);
     await loadPosts();
   } catch (message) {
     show($("token-message"), String(message), true);
@@ -93,6 +176,7 @@ $("token-clear").addEventListener("click", async () => {
     show($("token-message"), "Token removed.");
     renderPosts([]);
     await refreshTokenStatus();
+    showPostsSetup(true);
   } catch (message) {
     show($("token-message"), String(message), true);
   }
@@ -109,8 +193,14 @@ async function refreshWordPressSettings() {
       $("wp-status"),
       settings.has_password ? "Settings are saved in this computer's credential store." : "No WordPress settings saved yet.",
     );
+    setup.wordpress = settings.has_password;
+    updateCredentialsAlert();
+    return settings.has_password;
   } catch (message) {
     show($("wp-status"), String(message), true);
+    setup.wordpress = false;
+    updateCredentialsAlert();
+    return false;
   }
 }
 
@@ -148,6 +238,9 @@ $("wp-clear").addEventListener("click", async () => {
 function renderPosts(posts) {
   const list = $("posts");
   list.replaceChildren();
+  // Four rows are visible; the box scrolls inside, and an empty one is not shown at all.
+  $("posts-scroll").hidden = posts.length === 0;
+  $("posts-scroll").scrollTop = 0;
   for (const post of posts) {
     const item = document.createElement("li");
     const button = document.createElement("button");
@@ -457,22 +550,15 @@ $("publish-copy").addEventListener("click", async () => {
   }
 });
 
-// --- Check a URL ---
-
-$("source-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    const target = await invoke("classify_instagram_url", { url: $("url").value });
-    show($("result"), describe(target));
-  } catch (message) {
-    show($("result"), String(message), true);
-  }
-});
-
 // --- Start ---
 
 async function start() {
-  refreshWordPressSettings();
+  // Both are read from the credential store, which is quick: pick the tab before any network call
+  // so the window opens where the user has to be.
+  await refreshTokenStatus();
+  await refreshWordPressSettings();
+  selectTab(setup.token && !setup.tokenExpired && setup.wordpress ? "editing" : "credentials");
+  showPostsSetup(!setup.token);
   // Renew the token when it is about to expire. A failure must not stop the app: the old token
   // may still work, and the message says what happened.
   try {

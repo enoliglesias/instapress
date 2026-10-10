@@ -3,12 +3,10 @@
 //! Pure string work: no network and no URL crate. Anything that is not clearly one of the three
 //! supported shapes is rejected with an error that names the input.
 
-use serde::Serialize;
 use thiserror::Error;
 
 /// What an Instagram URL points at, with the identifier needed to fetch it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InstagramTarget {
     Profile { username: String },
     Post { shortcode: String },
@@ -36,7 +34,7 @@ const RESERVED: &[&str] = &[
 /// `www.` and `m.` hosts are accepted.
 ///
 /// ```
-/// use recipe_sync::instagram_url::{parse, InstagramTarget};
+/// use instapress::instagram_url::{parse, InstagramTarget};
 ///
 /// let target = parse("https://www.instagram.com/reel/C8xYz/?igsh=abc").unwrap();
 /// assert_eq!(target, InstagramTarget::Reel { shortcode: "C8xYz".into() });

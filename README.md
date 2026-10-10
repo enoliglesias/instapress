@@ -1,4 +1,4 @@
-# recipe-sync
+# Instapress
 
 Desktop app (Rust and Tauri v2) that turns one of your own Instagram recipes into a WordPress draft:
 

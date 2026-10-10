@@ -2,7 +2,7 @@
 //! capability can grant only the commands it needs.
 
 const COMMANDS: &[&str] = &[
-    "classify_instagram_url",
+    "set_layout_menu",
     "prepare_draft",
     "suggest_slug",
     "token_status",

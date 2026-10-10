@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidelines for working in this repository (`recipe-sync`, a Rust & Tauri desktop app).
+Guidelines for working in this repository (`instapress`, a Rust & Tauri desktop app).
 
 ## What the app does
 

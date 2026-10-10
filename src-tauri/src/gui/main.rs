@@ -1,27 +1,93 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 //! Tauri shell: one window that hosts the static frontend in `ui/`.
 //!
-//! Commands are thin adapters over the `recipe_sync` library; the webview only renders and
+//! Commands are thin adapters over the `instapress` library; the webview only renders and
 //! sends validated requests. The HTTP client and the credential store block, so the commands
 //! that use them are `#[tauri::command(async)]`: they run on Tauri's own runtime instead of the
 //! UI thread and hold one of its workers while they wait, which the client timeouts bound. No
 //! async runtime of our own is needed.
 
 use anyhow::{Context, Result};
-use recipe_sync::http::UreqClient;
-use recipe_sync::instagram_api::{self, Post, RenewalOutcome, TokenStatus};
-use recipe_sync::instagram_url::{self, InstagramTarget};
-use recipe_sync::publish::{publish_draft, DraftInput};
-use recipe_sync::recipe_html::{prepare_draft_text, slugify, DraftText};
-use recipe_sync::token::{AccessToken, KeyringStore, TokenStore};
-use recipe_sync::wordpress::{
+use instapress::http::UreqClient;
+use instapress::instagram_api::{self, Post, RenewalOutcome, TokenStatus};
+use instapress::publish::{publish_draft, DraftInput};
+use instapress::recipe_html::{prepare_draft_text, slugify, DraftText};
+use instapress::token::{AccessToken, KeyringStore, TokenStore};
+use instapress::wordpress::{
     self, CategoryItem, CreatedPost, CredentialsStore, KeyringCredentials, WpCredentials,
 };
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::menu::{
+    CheckMenuItem, CheckMenuItemBuilder, MenuBuilder, MenuItemBuilder, SubmenuBuilder,
+};
+use tauri::{Emitter, Manager, Wry};
 
 /// How many of the newest posts the main window asks for.
 const RECENT_POSTS: u8 = 25;
+
+const MENU_EXIT: &str = "exit";
+const MENU_TWO_COLUMNS: &str = "two-columns";
+const MENU_ABOUT: &str = "about";
+/// The event the window listens to for the state of View > 2 columns.
+const LAYOUT_EVENT: &str = "layout";
+/// The event that asks the window to show its About dialog; the payload is the app version.
+const ABOUT_EVENT: &str = "about";
+
+/// The View > 2 columns item, kept so the window can set its check mark when it starts.
+struct LayoutMenu(CheckMenuItem<Wry>);
+
+/// Builds the menu bar: File > Exit, View > 2 columns and Help > About. On macOS the Edit menu is added too,
+/// because the copy, paste and undo shortcuts of a webview work through it there.
+fn build_menu(app: &tauri::App) -> tauri::Result<()> {
+    let exit = MenuItemBuilder::with_id(MENU_EXIT, "Exit").build(app)?;
+    let file = SubmenuBuilder::new(app, "File").item(&exit).build()?;
+    let two_columns = CheckMenuItemBuilder::with_id(MENU_TWO_COLUMNS, "2 columns")
+        .checked(false)
+        .build(app)?;
+    let view = SubmenuBuilder::new(app, "View")
+        .item(&two_columns)
+        .build()?;
+    let about = MenuItemBuilder::with_id(MENU_ABOUT, "About Instapress").build(app)?;
+    let help = SubmenuBuilder::new(app, "Help").item(&about).build()?;
+
+    let menu = MenuBuilder::new(app).item(&file);
+    #[cfg(target_os = "macos")]
+    let menu = menu.item(
+        &SubmenuBuilder::new(app, "Edit")
+            .undo()
+            .redo()
+            .separator()
+            .cut()
+            .copy()
+            .paste()
+            .select_all()
+            .build()?,
+    );
+    app.set_menu(menu.item(&view).item(&help).build()?)?;
+    app.manage(LayoutMenu(two_columns));
+    Ok(())
+}
+
+/// Acts on a menu click: Exit closes the app, About asks the window to show its dialog, and a click on 2 columns tells the window the new
+/// state of the check mark, which the menu has already flipped.
+fn on_menu_event(app: &tauri::AppHandle, event: tauri::menu::MenuEvent) {
+    match event.id().as_ref() {
+        MENU_EXIT => app.exit(0),
+        MENU_TWO_COLUMNS => {
+            if let Some(menu) = app.try_state::<LayoutMenu>() {
+                // Nothing to do if either step fails: the window keeps the layout it has.
+                if let Ok(checked) = menu.0.is_checked() {
+                    let _ = app.emit(LAYOUT_EVENT, checked);
+                }
+            }
+        }
+        MENU_ABOUT => {
+            let _ = app.emit(ABOUT_EVENT, env!("CARGO_PKG_VERSION"));
+        }
+        _ => {}
+    }
+}
 
 /// The current time in seconds since 1970; a clock set before then counts as 0.
 fn unix_now() -> u64 {
@@ -46,9 +112,11 @@ struct WordPressSettings {
     has_password: bool,
 }
 
+/// Sets the check mark of View > 2 columns, which the window calls on start with the layout it
+/// remembers.
 #[tauri::command]
-fn classify_instagram_url(url: &str) -> Result<InstagramTarget, String> {
-    instagram_url::parse(url).map_err(|e| e.to_string())
+fn set_layout_menu(two_columns: bool, menu: tauri::State<'_, LayoutMenu>) -> Result<(), String> {
+    menu.0.set_checked(two_columns).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -140,8 +208,10 @@ fn create_wordpress_draft(
 fn main() -> Result<()> {
     tauri::Builder::default()
         .manage(AppState::default())
+        .setup(|app| Ok(build_menu(app)?))
+        .on_menu_event(on_menu_event)
         .invoke_handler(tauri::generate_handler![
-            classify_instagram_url,
+            set_layout_menu,
             prepare_draft,
             suggest_slug,
             token_status,
@@ -157,5 +227,5 @@ fn main() -> Result<()> {
             create_wordpress_draft
         ])
         .run(tauri::generate_context!())
-        .context("failed to run the recipe-sync window")
+        .context("failed to run the instapress window")
 }

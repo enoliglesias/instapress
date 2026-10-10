@@ -1,25 +1,49 @@
+/* Tokens ------------------------------------------------------------------------------------ */
+
 :root {
-  --bg: #f4f6f4;
-  --fg: #19261d;
-  --muted: #5f6e63;
-  --line: #d3dcd4;
-  --accent: #2f7d4f;
-  --accent-fg: #ffffff;
+  /* The brand teal #00a498 fills buttons and marks the selected tab. White on it has a contrast
+     of only 3.1:1, so the text on a fill is the dark --accent-fg (4.9:1), and the text, the
+     borders and the focus rings that use the accent take the darker --accent-text (4.9:1 or more
+     on the page, 5.4:1 on a card). --field-line outlines the controls at 3:1 or more, which is
+     what tells a field from the page; --line is only for the soft separators of cards. */
+  --bg: #eff5f4;
+  --surface: #ffffff;
+  --fg: #14211f;
+  --muted: #526866;
+  --line: #d0deda;
+  --field-line: #768986;
+  --accent: #00a498;
+  --accent-fg: #052a26;
+  --accent-text: #00776e;
   --error: #b3263e;
+  --shadow: rgba(0, 40, 36, 0.22);
+  --radius: 10px;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #101612;
-    --fg: #e8efe9;
-    --muted: #92a296;
-    --line: #2a372d;
-    --accent: #5cc38a;
-    --accent-fg: #101612;
+    --bg: #0c1312;
+    --surface: #121b1a;
+    --fg: #e5f0ee;
+    --muted: #8fa6a3;
+    --line: #24352f;
+    --field-line: #5f7c77;
+    --accent: #00a498;
+    --accent-fg: #052a26;
+    --accent-text: #2dc9bc;
     --error: #ff7b8f;
+    --shadow: rgba(0, 0, 0, 0.55);
     color-scheme: dark;
   }
+}
+
+/* Base -------------------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
@@ -29,20 +53,14 @@ body {
   font: 15px/1.5 system-ui, sans-serif;
 }
 
-main {
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 32px 24px;
-}
-
 h1 {
-  margin: 0 0 4px;
-  font-size: 24px;
+  margin: 0 0 12px;
+  font-size: 20px;
 }
 
-.hint {
-  margin: 0 0 24px;
-  color: var(--muted);
+h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
 }
 
 label {
@@ -51,9 +69,154 @@ label {
   font-weight: 600;
 }
 
+.hint {
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.error {
+  color: var(--error);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Layout: the header with the tabs stays on screen while the panel scrolls ------------------- */
+
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding-inline: 24px;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.app-header .wrap {
+  padding-top: 16px;
+}
+
+main.wrap {
+  padding-block: 24px 48px;
+}
+
+[role="tabpanel"]:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 4px;
+}
+
+/* Tabs --------------------------------------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  padding: 10px 16px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.tab:hover {
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* A mark on the tab when something needs attention: not only a colour, the tab also says so to
+   a screen reader. */
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--error);
+}
+
+.dot[hidden] {
+  display: none;
+}
+
+/* Cards -------------------------------------------------------------------------------------- */
+
+.card {
+  margin-top: 16px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+[role="tabpanel"] > .card:first-child {
+  margin-top: 0;
+}
+
+#draft {
+  /* Leave room for the sticky header when the window scrolls to the draft. */
+  scroll-margin-top: 120px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.setup {
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.setup p {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+/* Forms -------------------------------------------------------------------------------------- */
+
 .row {
   display: flex;
   gap: 8px;
+}
+
+.row.wrap-row {
+  flex-wrap: wrap;
+}
+
+.row.actions {
+  margin-top: 12px;
 }
 
 input:not([type="radio"]):not([type="checkbox"]):not([type="file"]),
@@ -61,11 +224,36 @@ textarea {
   flex: 1;
   min-width: 0;
   padding: 10px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
+}
+
+form > input,
+fieldset input:not([type="radio"]):not([type="checkbox"]):not([type="file"]),
+fieldset textarea,
+#draft input[type="text"]:not([readonly]) {
+  display: block;
+  width: 100%;
+}
+
+form > input {
+  margin-bottom: 12px;
+}
+
+form > label:not(:first-child) {
+  margin-top: 4px;
+}
+
+textarea {
+  display: block;
+  resize: vertical;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 button {
@@ -79,159 +267,62 @@ button {
   cursor: pointer;
 }
 
-input:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-#result {
-  min-height: 1.5em;
-  margin-top: 16px;
-}
-
-#result.error {
-  color: var(--error);
-}
-
-section {
-  margin-top: 32px;
-}
-
-h2 {
-  margin: 0 0 8px;
-  font-size: 18px;
-}
-
-h3 {
-  margin: 16px 0 6px;
-  font-size: 15px;
-}
-
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 button.secondary {
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   background: transparent;
   color: var(--fg);
 }
 
-.posts {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+button:hover:not(:disabled):not(.secondary):not(.tab) {
+  filter: brightness(1.08);
 }
 
-button.post {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  width: 100%;
-  padding: 8px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--fg);
-  font-weight: 400;
-  text-align: left;
+button.secondary:hover:not(:disabled) {
+  border-color: var(--accent-text);
 }
 
-button.post img {
-  flex: none;
-  width: 72px;
-  height: 72px;
-  border-radius: 6px;
-  background: var(--line);
-  object-fit: cover;
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
-button.post small {
-  display: block;
-  color: var(--muted);
-}
-
-.excerpt {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
-pre {
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: inherit;
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+.scroll-box:focus-visible,
+.editor:focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: 2px;
 }
 
 #token-message,
-#posts-message {
+#wp-message,
+#posts-message,
+#publish-message,
+#category-message,
+#result {
   min-height: 1.5em;
 }
 
-#token-message.error,
-#posts-message.error {
+#result {
+  margin-top: 16px;
+}
+
+#publish-warning {
+  margin: 8px 0 0;
   color: var(--error);
 }
 
-.row.actions {
-  margin-top: 12px;
+#draft-slug-hint,
+#draft-meta-count,
+#image-file-info,
+#category-message {
+  min-height: 1.5em;
+  margin: 4px 0 12px;
 }
 
-form > input {
-  display: block;
-  width: 100%;
-  margin-bottom: 12px;
-}
-
-form > label:not(:first-child) {
-  margin-top: 4px;
-}
-
-.label,
-legend {
-  display: block;
-  margin: 16px 0 6px;
-  font-weight: 600;
-}
-
-#draft input[type="text"]:not([readonly]) {
-  width: 100%;
-}
-
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.toolbar button {
-  padding: 6px 12px;
-}
-
-.editor {
-  min-height: 220px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow-wrap: anywhere;
-}
-
-.editor:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.editor h2 {
-  font-size: 18px;
+#image-file-info {
+  margin-left: 24px;
 }
 
 fieldset {
@@ -240,8 +331,12 @@ fieldset {
   border: 0;
 }
 
+.label,
 legend {
+  display: block;
+  margin: 16px 0 6px;
   padding: 0;
+  font-weight: 600;
 }
 
 .choice {
@@ -250,32 +345,6 @@ legend {
   align-items: center;
   margin: 6px 0;
   font-weight: 400;
-}
-
-.image-preview img {
-  border-radius: 6px;
-  object-fit: cover;
-}
-
-button.post[aria-current="true"] {
-  border-color: var(--accent);
-  outline: 1px solid var(--accent);
-}
-
-#publish-message {
-  min-height: 1.5em;
-}
-
-#publish-message.error,
-#wp-message.error,
-#wp-status.error,
-#token-status.error {
-  color: var(--error);
-}
-
-button:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 .choice input {
@@ -291,44 +360,130 @@ input[type="file"] {
   font: inherit;
 }
 
-#image-file-info {
-  min-height: 1.5em;
-  margin: 4px 0 0 24px;
+.image-preview img {
+  border-radius: 6px;
+  object-fit: cover;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
+/* The editor --------------------------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
-fieldset input:not([type="radio"]):not([type="checkbox"]):not([type="file"]),
-fieldset textarea {
+.toolbar button {
+  padding: 6px 12px;
+}
+
+.editor {
+  min-height: 220px;
+  padding: 12px;
+  border: 1px solid var(--field-line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.editor h2 {
+  font-size: 18px;
+}
+
+/* Recent posts: four rows are visible and the box inside scrolls, not the whole window -------- */
+
+.scroll-box {
+  --row: 90px;
+  --gap: 8px;
+  /* Four rows, the gaps between them, the padding of the list and the border. */
+  max-height: calc(4 * var(--row) + 3 * var(--gap) + 2 * var(--gap) + 2px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background-color: var(--surface);
+  /* Shadows at the edges that still have more to show: the covers move with the content and hide
+     the shadow when the list is at that end, so a shadow tells there is more to scroll to. */
+  background-image:
+    linear-gradient(var(--surface) 30%, transparent),
+    linear-gradient(transparent, var(--surface) 70%),
+    radial-gradient(farthest-side at 50% 0, var(--shadow), transparent),
+    radial-gradient(farthest-side at 50% 100%, var(--shadow), transparent);
+  background-position: top, bottom, top, bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 32px, 100% 32px, 100% 12px, 100% 12px;
+  background-attachment: local, local, scroll, scroll;
+}
+
+.posts {
+  display: grid;
+  gap: var(--gap);
+  margin: 0;
+  padding: var(--gap);
+  list-style: none;
+}
+
+button.post {
+  display: flex;
+  gap: 12px;
+  align-items: center;
   width: 100%;
+  height: var(--row);
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg);
+  font-weight: 400;
+  text-align: left;
 }
 
-textarea {
+button.post:hover {
+  border-color: var(--accent-text);
+}
+
+button.post[aria-current="true"] {
+  border-color: var(--accent-text);
+  outline: 1px solid var(--accent-text);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+button.post img {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  background: var(--line);
+  object-fit: cover;
+}
+
+button.post > span:last-child {
+  min-width: 0;
+}
+
+button.post small {
   display: block;
-  resize: vertical;
+  color: var(--muted);
+  line-height: 1.3;
 }
 
-#draft-slug-hint,
-#draft-meta-count {
-  min-height: 1.5em;
-  margin: 4px 0 12px;
+/* Two lines of the caption fit next to the picture; the whole text is in the draft. */
+.excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-#publish-warning {
-  margin: 8px 0 0;
-  color: var(--error);
-}
+/* Categories --------------------------------------------------------------------------------- */
 
 .category-list {
   max-height: 220px;
   margin: 8px 0 0;
   padding: 8px 12px;
   overflow: auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 8px;
   list-style: none;
 }
@@ -343,11 +498,91 @@ textarea {
 .category-list li[data-depth="4"] { margin-left: 96px; }
 .category-list li[data-depth="5"] { margin-left: 120px; }
 
-#category-message {
-  min-height: 1.5em;
-  margin: 4px 0 12px;
+pre {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
 }
 
-#category-message.error {
-  color: var(--error);
+/* Two columns (View > 2 columns) -------------------------------------------------------------
+   The posts stay on the left with a list that scrolls inside, and the draft is on the right, so
+   a post can be changed without scrolling back up. The credentials sit side by side. Below 880 px
+   there is no room for it and the single-column layout is used whatever the choice. */
+
+.placeholder {
+  display: none;
+  color: var(--muted);
+  text-align: center;
+}
+
+.placeholder p {
+  margin: 0;
+}
+
+@media (min-width: 880px) {
+  :root[data-layout="two"] .wrap {
+    max-width: 1240px;
+  }
+
+  :root[data-layout="two"] #panel-credentials {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  :root[data-layout="two"] #panel-editing {
+    display: grid;
+    grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  :root[data-layout="two"] [role="tabpanel"] > .card {
+    margin-top: 0;
+  }
+
+  :root[data-layout="two"] .posts-card {
+    position: sticky;
+    top: 120px;
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  :root[data-layout="two"] #draft,
+  :root[data-layout="two"] #draft-placeholder {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  :root[data-layout="two"] #draft[hidden] + #draft-placeholder {
+    display: block !important;
+  }
+
+  /* The list takes the height that is left under the header instead of four rows. */
+  :root[data-layout="two"] .scroll-box {
+    max-height: calc(100vh - 270px);
+  }
+}
+
+/* About dialog */
+dialog {
+  max-width: 460px;
+  padding: 20px 24px;
+  border: 1px solid var(--field-line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+dialog::backdrop {
+  background: rgba(0, 20, 18, 0.55);
+}
+
+dialog h2 {
+  margin-top: 0;
 }

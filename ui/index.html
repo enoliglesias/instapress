@@ -3,135 +3,153 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>recipe-sync</title>
+  <title>Instapress</title>
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <main>
-    <h1>recipe-sync</h1>
+  <header class="app-header">
+    <div class="wrap">
+      <h1>Instapress</h1>
+      <div class="tabs" role="tablist" aria-label="Secciones">
+        <button type="button" role="tab" id="tab-credentials" class="tab" data-tab="credentials" aria-controls="panel-credentials" aria-selected="false" tabindex="-1">Credenciales<span id="credentials-alert" class="dot" hidden><span class="visually-hidden"> (pendiente)</span></span></button>
+        <button type="button" role="tab" id="tab-editing" class="tab" data-tab="editing" aria-controls="panel-editing" aria-selected="true">Edición</button>
+      </div>
+    </div>
+  </header>
 
-    <section aria-labelledby="token-title">
-      <h2 id="token-title">Instagram access</h2>
-      <p id="token-status" class="hint"></p>
-      <form id="token-form" autocomplete="off">
-        <label for="token">Access token</label>
-        <div class="row">
-          <input id="token" type="password" spellcheck="false" placeholder="Paste the token from the Meta panel">
-          <button type="submit">Save</button>
-          <button type="button" id="token-renew" class="secondary">Renew now</button>
-          <button type="button" id="token-clear" class="secondary">Remove</button>
+  <main class="wrap">
+    <div role="tabpanel" id="panel-credentials" aria-labelledby="tab-credentials" tabindex="0" hidden>
+      <section class="card" aria-labelledby="token-title">
+        <h2 id="token-title">Instagram access</h2>
+        <p id="token-status" class="hint"></p>
+        <form id="token-form" autocomplete="off">
+          <label for="token">Access token</label>
+          <div class="row wrap-row">
+            <input id="token" type="password" spellcheck="false" placeholder="Paste the token from the Meta panel">
+            <button type="submit">Save</button>
+            <button type="button" id="token-renew" class="secondary">Renew now</button>
+            <button type="button" id="token-clear" class="secondary">Remove</button>
+          </div>
+        </form>
+        <p id="token-message" role="status"></p>
+      </section>
+
+      <section class="card" aria-labelledby="wp-title">
+        <h2 id="wp-title">WordPress access</h2>
+        <p id="wp-status" class="hint"></p>
+        <form id="wp-form" autocomplete="off">
+          <label for="wp-site">Site address</label>
+          <input id="wp-site" type="text" spellcheck="false" placeholder="https://your-site.com">
+          <label for="wp-user">User name</label>
+          <input id="wp-user" type="text" spellcheck="false" autocomplete="off">
+          <label for="wp-password">Application password</label>
+          <input id="wp-password" type="password" spellcheck="false" placeholder="Created in your WordPress profile">
+          <div class="row actions">
+            <button type="submit">Save</button>
+            <button type="button" id="wp-clear" class="secondary">Remove</button>
+          </div>
+        </form>
+        <p id="wp-message" role="status"></p>
+      </section>
+    </div>
+
+    <div role="tabpanel" id="panel-editing" aria-labelledby="tab-editing" tabindex="0">
+      <section class="card posts-card" aria-labelledby="posts-title">
+        <div class="head">
+          <h2 id="posts-title">Recent posts</h2>
+          <button type="button" id="posts-refresh" class="secondary">Refresh</button>
         </div>
-      </form>
-      <p id="token-message" role="status"></p>
-    </section>
+        <div id="posts-setup" class="setup" hidden>
+          <p>Save your Instagram token in the Credenciales tab to see your posts.</p>
+          <button type="button" id="go-credentials">Open Credenciales</button>
+        </div>
+        <p id="posts-message" role="status"></p>
+        <div id="posts-scroll" class="scroll-box" role="region" aria-label="Recent posts" tabindex="0" hidden>
+          <ul id="posts" class="posts"></ul>
+        </div>
+      </section>
 
-    <section aria-labelledby="wp-title">
-      <h2 id="wp-title">WordPress access</h2>
-      <p id="wp-status" class="hint"></p>
-      <form id="wp-form" autocomplete="off">
-        <label for="wp-site">Site address</label>
-        <input id="wp-site" type="text" spellcheck="false" placeholder="https://your-site.com">
-        <label for="wp-user">User name</label>
-        <input id="wp-user" type="text" spellcheck="false" autocomplete="off">
-        <label for="wp-password">Application password</label>
-        <input id="wp-password" type="password" spellcheck="false" placeholder="Created in your WordPress profile">
+      <section id="draft" class="card" aria-labelledby="draft-title" hidden>
+        <h2 id="draft-title">Draft</h2>
+        <label for="draft-title-input">Title</label>
+        <input id="draft-title-input" type="text" maxlength="200">
+
+        <span class="label" id="editor-label">Text</span>
+        <div class="toolbar" role="group" aria-label="Text formatting">
+          <button type="button" data-command="bold" class="secondary" title="Bold" aria-label="Bold"><b>B</b></button>
+          <button type="button" data-command="italic" class="secondary" title="Italic" aria-label="Italic"><i>I</i></button>
+          <button type="button" data-command="heading" class="secondary" title="Heading" aria-label="Heading">H</button>
+          <button type="button" data-command="insertUnorderedList" class="secondary" title="Bullet list" aria-label="Bullet list">&bull; List</button>
+          <button type="button" data-command="insertOrderedList" class="secondary" title="Numbered list" aria-label="Numbered list">1. List</button>
+        </div>
+        <div id="editor" class="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="editor-label"></div>
+
+        <fieldset id="categories-block">
+          <legend>Categories</legend>
+          <label for="category-search">Search categories</label>
+          <div class="row">
+            <input id="category-search" type="search" placeholder="Search" autocomplete="off">
+            <button type="button" id="categories-reload" class="secondary">Reload</button>
+          </div>
+          <ul id="category-list" class="category-list"></ul>
+          <p id="category-message" class="hint" role="status"></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>SEO</legend>
+          <label for="draft-slug-input">Slug (the end of the address)</label>
+          <input id="draft-slug-input" type="text" spellcheck="false" maxlength="100" autocomplete="off" aria-describedby="draft-slug-hint">
+          <p id="draft-slug-hint" class="hint">Lower-case letters, numbers and hyphens, made from the title until you edit it. Leave it empty to let WordPress choose.</p>
+          <label for="draft-keyphrase">Focus keyphrase</label>
+          <input id="draft-keyphrase" type="text" spellcheck="false" maxlength="100" autocomplete="off" aria-describedby="draft-keyphrase-hint">
+          <p id="draft-keyphrase-hint" class="hint">The word or phrase this post should rank for (Yoast's focus keyphrase). Optional.</p>
+          <label for="draft-meta">Meta description</label>
+          <textarea id="draft-meta" rows="3" maxlength="300" aria-describedby="draft-meta-count"></textarea>
+          <p id="draft-meta-count" class="hint"></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Image</legend>
+          <label class="choice"><input type="radio" name="image" value="post" id="image-post"> <span>The post's picture</span></label>
+          <div id="image-post-preview" class="image-preview" hidden></div>
+          <label class="choice"><input type="radio" name="image" value="file" id="image-file"> <span>A file from this computer</span></label>
+          <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Image file" aria-describedby="image-file-info">
+          <p id="image-file-info" class="hint" role="status"></p>
+          <label class="choice"><input type="radio" name="image" value="none" id="image-none"> <span>No image</span></label>
+        </fieldset>
+
+        <fieldset id="video-options" hidden>
+          <legend>Video</legend>
+          <label class="choice"><input type="checkbox" id="video-embed"> <span>Show the post's video below the text, with a "Ver el vídeo" link at the top (Instagram player)</span></label>
+        </fieldset>
+
         <div class="row actions">
-          <button type="submit">Save</button>
-          <button type="button" id="wp-clear" class="secondary">Remove</button>
+          <button type="button" id="publish">Create draft in WordPress</button>
         </div>
-      </form>
-      <p id="wp-message" role="status"></p>
-    </section>
-
-    <section aria-labelledby="posts-title">
-      <div class="head">
-        <h2 id="posts-title">Recent posts</h2>
-        <button type="button" id="posts-refresh" class="secondary">Refresh</button>
-      </div>
-      <p id="posts-message" role="status"></p>
-      <ul id="posts" class="posts"></ul>
-    </section>
-
-    <section id="draft" aria-labelledby="draft-title" hidden>
-      <h2 id="draft-title">Draft</h2>
-      <label for="draft-title-input">Title</label>
-      <input id="draft-title-input" type="text" maxlength="200">
-
-      <span class="label" id="editor-label">Text</span>
-      <div class="toolbar" role="group" aria-label="Text formatting">
-        <button type="button" data-command="bold" class="secondary" title="Bold" aria-label="Bold"><b>B</b></button>
-        <button type="button" data-command="italic" class="secondary" title="Italic" aria-label="Italic"><i>I</i></button>
-        <button type="button" data-command="heading" class="secondary" title="Heading" aria-label="Heading">H</button>
-        <button type="button" data-command="insertUnorderedList" class="secondary" title="Bullet list" aria-label="Bullet list">&bull; List</button>
-        <button type="button" data-command="insertOrderedList" class="secondary" title="Numbered list" aria-label="Numbered list">1. List</button>
-      </div>
-      <div id="editor" class="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="editor-label"></div>
-
-      <fieldset id="categories-block">
-        <legend>Categories</legend>
-        <label for="category-search">Search categories</label>
-        <div class="row">
-          <input id="category-search" type="search" placeholder="Search" autocomplete="off">
-          <button type="button" id="categories-reload" class="secondary">Reload</button>
+        <p id="publish-message" role="status"></p>
+        <p id="publish-warning" role="alert" hidden></p>
+        <div id="publish-result" hidden>
+          <p>Open this address in your browser to review and publish it:</p>
+          <div class="row">
+            <input id="publish-url" type="text" readonly>
+            <button type="button" id="publish-copy" class="secondary">Copy</button>
+          </div>
         </div>
-        <ul id="category-list" class="category-list"></ul>
-        <p id="category-message" class="hint" role="status"></p>
-      </fieldset>
+      </section>
 
-      <fieldset>
-        <legend>SEO</legend>
-        <label for="draft-slug-input">Slug (the end of the address)</label>
-        <input id="draft-slug-input" type="text" spellcheck="false" maxlength="100" autocomplete="off" aria-describedby="draft-slug-hint">
-        <p id="draft-slug-hint" class="hint">Lower-case letters, numbers and hyphens, made from the title until you edit it. Leave it empty to let WordPress choose.</p>
-        <label for="draft-keyphrase">Focus keyphrase</label>
-        <input id="draft-keyphrase" type="text" spellcheck="false" maxlength="100" autocomplete="off" aria-describedby="draft-keyphrase-hint">
-        <p id="draft-keyphrase-hint" class="hint">The word or phrase this post should rank for (Yoast's focus keyphrase). Optional.</p>
-        <label for="draft-meta">Meta description</label>
-        <textarea id="draft-meta" rows="3" maxlength="300" aria-describedby="draft-meta-count"></textarea>
-        <p id="draft-meta-count" class="hint"></p>
-      </fieldset>
-
-      <fieldset>
-        <legend>Image</legend>
-        <label class="choice"><input type="radio" name="image" value="post" id="image-post"> <span>The post's picture</span></label>
-        <div id="image-post-preview" class="image-preview" hidden></div>
-        <label class="choice"><input type="radio" name="image" value="file" id="image-file"> <span>A file from this computer</span></label>
-        <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Image file" aria-describedby="image-file-info">
-        <p id="image-file-info" class="hint" role="status"></p>
-        <label class="choice"><input type="radio" name="image" value="none" id="image-none"> <span>No image</span></label>
-      </fieldset>
-
-      <fieldset id="video-options" hidden>
-        <legend>Video</legend>
-        <label class="choice"><input type="checkbox" id="video-embed"> <span>Show the post's video below the text, with a "Ver el vídeo" link at the top (Instagram player)</span></label>
-      </fieldset>
-
-      <div class="row actions">
-        <button type="button" id="publish">Create draft in WordPress</button>
+      <div id="draft-placeholder" class="card placeholder">
+        <p>Select a post to start a draft.</p>
       </div>
-      <p id="publish-message" role="status"></p>
-      <p id="publish-warning" role="alert" hidden></p>
-      <div id="publish-result" hidden>
-        <p>Open this address in your browser to review and publish it:</p>
-        <div class="row">
-          <input id="publish-url" type="text" readonly>
-          <button type="button" id="publish-copy" class="secondary">Copy</button>
-        </div>
-      </div>
-    </section>
-
-    <section aria-labelledby="url-title">
-      <h2 id="url-title">Check a URL</h2>
-      <form id="source-form" autocomplete="off">
-        <label for="url">Instagram URL</label>
-        <div class="row">
-          <input id="url" type="text" spellcheck="false" placeholder="https://www.instagram.com/reel/...">
-          <button type="submit">Check</button>
-        </div>
-      </form>
-      <p id="result" role="status"></p>
-    </section>
+    </div>
   </main>
+  <dialog id="about" aria-labelledby="about-title">
+    <h2 id="about-title">Instapress <span id="about-version" class="hint"></span></h2>
+    <p>Turns your own Instagram recipe posts into WordPress drafts: it loads your posts, lets you edit the caption (title, text, categories, image, video, slug and SEO fields) and creates the result as a draft on your site through the WordPress REST API. Nothing is published until you review the draft in WordPress.</p>
+    <p>Your Instagram token and your WordPress application password are kept in the operating system's credential store.</p>
+    <p>Created by Enol Iglesias.<br>Released under the MIT License. Copyright &copy; 2026 Enol Iglesias.</p>
+    <p class="hint">Provided "as is", without warranty of any kind. Not affiliated with or endorsed by Meta, Instagram or WordPress.</p>
+    <div class="row actions"><button type="button" id="about-close">Close</button></div>
+  </dialog>
   <script src="app.js"></script>
 </body>
 </html>

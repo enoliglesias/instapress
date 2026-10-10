@@ -5,12 +5,13 @@ status: active
 
 # Knowledge Base Index
 
-Living snapshot of the current state of `recipe-sync`, structured with C4 and Diataxis. No changelogs.
+Living snapshot of the current state of `instapress`, structured with C4 and Diataxis. No changelogs.
 
 ## Structure
 
 - **`architecture/`**
   - [`system-context.md`](architecture/system-context.md): what the app is, its actors and external systems, modules, IPC commands, the main window behavior, security, dependencies, what exists today and what does not.
+  - [`ui-design.md`](architecture/ui-design.md): the palette and its contrast, the menu bar, the one-column and two-column layouts and how the pieces behave.
   - [`http-client.md`](architecture/http-client.md): the shared blocking HTTP client, its rules (HTTPS only, no redirects, timeouts) and its fixed-phrase errors.
 - **`domain/`**
   - [`instagram-url.md`](domain/instagram-url.md): how an Instagram URL is classified as a profile, post or reel, and which inputs are rejected.

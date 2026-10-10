@@ -9,7 +9,7 @@ The app reads the user's **own** posts through the Instagram API with Instagram 
 
 ## Access token
 - `AccessToken` is a newtype. It is trimmed, must not be empty (`TokenError::Empty`) or contain whitespace (`TokenError::ContainsWhitespace`), and its `Debug` output is redacted. It has no `Display` or `Serialize`; the raw value is only exposed to build the request.
-- The token is stored in the OS credential store (Windows Credential Manager, macOS Keychain, Secret Service on Linux) under service `recipe-sync`, user `instagram-token`. It is never written to a file, a log or an error message. A credential store failure is `TokenError::Store` with the action and the store's own message.
+- The token is stored in the OS credential store (Windows Credential Manager, macOS Keychain, Secret Service on Linux) under service `instapress`, user `instagram-token`. It is never written to a file, a log or an error message. A credential store failure is `TokenError::Store` with the action and the store's own message.
 - Removing a token that is not there is not an error. A stored value that no longer validates is read as no token, so the user pastes it again and the save overwrites it.
 - The user pastes the token in the settings block of the main window; it can also be removed there. The token generated in the Meta panel is long-lived (about 60 days); see the renewal below.
 
