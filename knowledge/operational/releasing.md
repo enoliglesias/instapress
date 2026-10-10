@@ -5,16 +5,16 @@ status: active
 
 # Building and releasing
 
-The Windows installer is built by GitHub Actions (`.github/workflows/release.yml`) with the Tauri CLI and NSIS (`bundle.targets` in `tauri.conf.json`). The installer is an `.exe` named after the product and the version.
+The Windows installer is built by GitHub Actions (`.github/workflows/release.yml`) with the Tauri CLI (version pinned in the workflow) and NSIS (`bundle.targets` in `tauri.conf.json`). The installer is an `.exe` named after the product and the version.
 
 ## Make a release
-1. Raise `version` in `src-tauri/Cargo.toml` (and `Cargo.lock` follows when the project is built) and commit it.
-2. Tag the commit with the same number prefixed by `v` (for example `v0.2.0`) and push the tag.
-3. The workflow refuses to run if the tag and the version differ, builds the installer and creates a **draft** release with it attached and generated notes.
-4. Open the draft on GitHub, check the installer, and publish it. The guide for users points to the Releases page.
+1. Raise `version` in `src-tauri/Cargo.toml` (`Cargo.lock` follows when the project is built), commit it and push.
+2. On GitHub create a release with a new tag made of that number prefixed by `v` (for example `v0.2.0`) and **publish** it. Nothing is built from a tag alone: the release and its tag are created by hand.
+3. Publishing the release starts the workflow. It refuses to go on if the tag and the version differ, runs the tests, builds the installer and attaches it to the release.
+4. Open the release and check that the installer is there. The guide for users points to the Releases page.
 
-## Test the build without releasing
-Run the **Release** workflow by hand from the Actions tab. It builds the installer and keeps it as the `instapress-windows` workflow artifact, with no release and no tag.
+## Build for a release that already exists
+If the build failed or the installer has to be made again, run the **Release** workflow by hand from the Actions tab and give the tag of the release. The installer replaces the one attached before.
 
 ## Checks on every push
 `.github/workflows/ci.yml` runs `cargo fmt --check`, `cargo clippy -- -D warnings` and `cargo test` on Windows for each push to `main` and each pull request.

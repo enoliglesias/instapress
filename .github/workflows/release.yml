@@ -1,54 +1,55 @@
 name: Release
 
-# Pushing a tag such as v0.2.0 builds the Windows installer and attaches it to a draft release.
-# Running the workflow by hand builds the installer and keeps it as a workflow artifact only.
+# Builds the Windows installer and attaches it to the release when it is published, or on demand
+# for a release that already exists (Actions tab, "Run workflow", giving its tag). Nothing is
+# published from here: the release itself, and its tag, are still created by hand.
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of an existing release to build and attach the installer to
+        required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  windows:
+  installer:
+    # Only this job uploads to the release.
+    permissions:
+      contents: write
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: bash
-        working-directory: src-tauri
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: The tag matches the version in Cargo.toml
-        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          ref: ${{ env.TAG }}
+      - name: Check that the tag matches the crate version
+        shell: bash
         run: |
-          version=$(grep -m1 '^version' Cargo.toml | cut -d '"' -f2)
-          if [ "v$version" != "${GITHUB_REF_NAME}" ]; then
-            echo "Tag ${GITHUB_REF_NAME} does not match version $version in Cargo.toml" >&2
+          version=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          if [ "${TAG#v}" != "$version" ]; then
+            echo "Tag $TAG does not match the crate version $version" >&2
             exit 1
           fi
-
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test
       - name: Install the Tauri CLI
-        run: cargo install tauri-cli --version "^2" --locked
-
+        run: cargo install tauri-cli --version 2.12.1 --locked
       - name: Build the installer
-        run: cargo tauri build
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: instapress-windows
-          path: src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: error
-
-      - name: Create the draft release
-        if: startsWith(github.ref, 'refs/tags/v')
+        working-directory: src-tauri
+        run: cargo tauri build --bundles nsis
+      - name: Attach it to the release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${GITHUB_REF_NAME}" target/release/bundle/nsis/*.exe \
-            --draft --title "Instapress ${GITHUB_REF_NAME}" --generate-notes
+        # The pattern is left unquoted on purpose so the shell expands it.
+        run: gh release upload "$TAG" src-tauri/target/release/bundle/nsis/*.exe --clobber
