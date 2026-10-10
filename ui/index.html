@@ -18,6 +18,7 @@
         <div class="row">
           <input id="token" type="password" spellcheck="false" placeholder="Paste the token from the Meta panel">
           <button type="submit">Save</button>
+          <button type="button" id="token-renew" class="secondary">Renew now</button>
           <button type="button" id="token-clear" class="secondary">Remove</button>
         </div>
       </form>
@@ -65,6 +66,17 @@
         <button type="button" data-command="insertOrderedList" class="secondary" title="Numbered list" aria-label="Numbered list">1. List</button>
       </div>
       <div id="editor" class="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="editor-label"></div>
+
+      <fieldset id="categories-block">
+        <legend>Categories</legend>
+        <label for="category-search">Search categories</label>
+        <div class="row">
+          <input id="category-search" type="search" placeholder="Search" autocomplete="off">
+          <button type="button" id="categories-reload" class="secondary">Reload</button>
+        </div>
+        <ul id="category-list" class="category-list"></ul>
+        <p id="category-message" class="hint" role="status"></p>
+      </fieldset>
 
       <fieldset>
         <legend>SEO</legend>

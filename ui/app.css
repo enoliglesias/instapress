@@ -322,3 +322,32 @@ textarea {
   margin: 8px 0 0;
   color: var(--error);
 }
+
+.category-list {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  list-style: none;
+}
+
+.category-list li {
+  margin: 2px 0;
+}
+
+.category-list li[data-depth="1"] { margin-left: 24px; }
+.category-list li[data-depth="2"] { margin-left: 48px; }
+.category-list li[data-depth="3"] { margin-left: 72px; }
+.category-list li[data-depth="4"] { margin-left: 96px; }
+.category-list li[data-depth="5"] { margin-left: 120px; }
+
+#category-message {
+  min-height: 1.5em;
+  margin: 4px 0 12px;
+}
+
+#category-message.error {
+  color: var(--error);
+}

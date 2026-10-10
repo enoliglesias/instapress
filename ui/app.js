@@ -31,12 +31,30 @@ function describe(target) {
 
 // --- Instagram access ---
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function describeExpiry(expiresAt) {
+  if (!expiresAt) return "Its expiry date is not known yet.";
+  const date = new Date(expiresAt * 1000);
+  const days = Math.ceil((date.getTime() - Date.now()) / DAY_MS);
+  if (days <= 0) return `It expired on ${date.toLocaleDateString()}: generate a new one in the Meta panel.`;
+  return `It expires on ${date.toLocaleDateString()} (in ${days} ${days === 1 ? "day" : "days"}).`;
+}
+
 async function refreshTokenStatus() {
   try {
-    const saved = await invoke("has_token");
-    show($("token-status"), saved ? "A token is saved in this computer's credential store." : "No token saved yet.");
+    const status = await invoke("token_status");
+    show(
+      $("token-status"),
+      status.has_token
+        ? `A token is saved in this computer's credential store. ${describeExpiry(status.expires_at)}`
+        : "No token saved yet.",
+    );
+    $("token-renew").disabled = !status.has_token;
+    return status.has_token;
   } catch (message) {
     show($("token-status"), String(message), true);
+    return false;
   }
 }
 
@@ -53,6 +71,18 @@ $("token-form").addEventListener("submit", async (event) => {
   } catch (message) {
     show($("token-message"), String(message), true);
   }
+});
+
+$("token-renew").addEventListener("click", async () => {
+  $("token-renew").disabled = true;
+  show($("token-message"), "Renewing the token...");
+  try {
+    await invoke("refresh_token");
+    show($("token-message"), "The token was renewed for about 60 days.");
+  } catch (message) {
+    show($("token-message"), `Could not renew the token: ${message}`, true);
+  }
+  await refreshTokenStatus();
 });
 
 $("token-clear").addEventListener("click", async () => {
@@ -184,6 +214,9 @@ let postPermalink = null;
 let chosenFile = null;
 let slugEdited = false;
 let slugTimer = null;
+// The categories of the site, loaded the first time a draft is opened.
+let categories = null;
+const selectedCategories = new Set();
 
 async function openDraft(post) {
   try {
@@ -197,6 +230,10 @@ async function openDraft(post) {
     $("draft-meta").value = metaDescription;
     $("draft-keyphrase").value = "";
     updateMetaCount();
+    selectedCategories.clear();
+    $("category-search").value = "";
+    if (categories === null) loadCategories();
+    else renderCategories();
     // `html` is built by the backend with every special character of the caption escaped.
     $("editor").innerHTML = html;
   } catch (message) {
@@ -297,6 +334,51 @@ function videoChoice() {
   return { kind: "none" };
 }
 
+// Compare without case or accents, so "tartas" finds "Tartas" and "postres" finds "Póstres".
+function foldText(text) {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function renderCategories() {
+  const list = $("category-list");
+  list.replaceChildren();
+  const query = foldText($("category-search").value.trim());
+  for (const category of categories ?? []) {
+    if (query && !foldText(category.name).includes(query)) continue;
+    const item = document.createElement("li");
+    item.dataset.depth = String(Math.min(category.depth, 5));
+    const label = document.createElement("label");
+    label.className = "choice";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = selectedCategories.has(category.id);
+    box.addEventListener("change", () => {
+      if (box.checked) selectedCategories.add(category.id);
+      else selectedCategories.delete(category.id);
+    });
+    const name = document.createElement("span");
+    name.textContent = category.name;
+    label.append(box, name);
+    item.append(label);
+    list.append(item);
+  }
+}
+
+async function loadCategories() {
+  show($("category-message"), "Loading categories...");
+  try {
+    categories = await invoke("list_categories");
+    show($("category-message"), categories.length ? "" : "The site has no categories.");
+  } catch (message) {
+    categories = null;
+    show($("category-message"), `Could not load the categories: ${message}`, true);
+  }
+  renderCategories();
+}
+
+$("category-search").addEventListener("input", renderCategories);
+$("categories-reload").addEventListener("click", loadCategories);
+
 function updateMetaCount() {
   const length = $("draft-meta").value.length;
   $("draft-meta-count").textContent = length
@@ -337,6 +419,7 @@ $("publish").addEventListener("click", async () => {
         slug: $("draft-slug-input").value,
         meta_description: $("draft-meta").value,
         focus_keyphrase: $("draft-keyphrase").value,
+        categories: [...selectedCategories],
         html: $("editor").innerHTML,
         image: imageChoice(),
         video: videoChoice(),
@@ -388,7 +471,17 @@ $("source-form").addEventListener("submit", async (event) => {
 
 // --- Start ---
 
-refreshWordPressSettings();
-refreshTokenStatus().then(async () => {
-  if (await invoke("has_token").catch(() => false)) await loadPosts();
-});
+async function start() {
+  refreshWordPressSettings();
+  // Renew the token when it is about to expire. A failure must not stop the app: the old token
+  // may still work, and the message says what happened.
+  try {
+    const outcome = await invoke("renew_token_if_due");
+    if (outcome.renewed) show($("token-message"), "The token was renewed for about 60 days.");
+  } catch (message) {
+    show($("token-message"), `Could not renew the token: ${message}`, true);
+  }
+  if (await refreshTokenStatus()) await loadPosts();
+}
+
+start();
