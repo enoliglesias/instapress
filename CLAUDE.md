@@ -58,7 +58,7 @@ This repository includes specialized Claude Code agents and skills under `.claud
 
 ## General guidelines
 
-- Authorship text (Cargo `authors`, installer publisher/copyright, `LICENSE`, About dialog, README) always lists Enol Iglesias and Rubén Sierra. This does NOT apply to git commit messages or trailers (no co-author trailers).
+- Authorship text (Cargo `authors`, installer publisher/copyright, `LICENSE`, About dialog, README) always lists Enol Iglesias only. This does NOT apply to git commit messages or trailers (no co-author trailers).
 
 - Do only what is asked; do not refactor or "improve" unrelated code.
 - Read the surrounding code before editing and match its style, naming and comment density.

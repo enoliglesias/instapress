@@ -24,6 +24,6 @@ cargo run --manifest-path src-tauri/Cargo.toml
 
 The living design notes are in [`knowledge/`](knowledge/00-index.md). Contributor and agent rules are in [`CLAUDE.md`](CLAUDE.md).
 
-## Authors and license
+## Author and license
 
-Enol Iglesias and Rubén Sierra. Released under the [MIT License](LICENSE).
+Enol Iglesias. Released under the [MIT License](LICENSE).

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.90"
 description = "Desktop app that turns an Instagram recipe post into a WordPress post"
-authors = ["Enol Iglesias", "Rubén Sierra"]
+authors = ["Enol Iglesias"]
 license = "MIT"
 default-run = "recipe-sync"
 

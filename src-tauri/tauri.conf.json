@@ -26,8 +26,8 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "publisher": "Enol Iglesias, Rubén Sierra",
-    "copyright": "Copyright (c) 2026 Enol Iglesias, Rubén Sierra",
+    "publisher": "Enol Iglesias",
+    "copyright": "Copyright (c) 2026 Enol Iglesias",
     "category": "Utility",
     "shortDescription": "Instagram recipe to WordPress post",
     "longDescription": "recipe-sync reads the caption of a public Instagram post or reel, lets you edit it, and publishes it as a recipe post on a WordPress site.",
