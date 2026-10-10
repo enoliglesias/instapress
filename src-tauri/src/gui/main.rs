@@ -8,6 +8,7 @@
 //! async runtime of our own is needed.
 
 use anyhow::{Context, Result};
+use instapress::browser::{self, BrowserError};
 use instapress::http::UreqClient;
 use instapress::instagram_api::{self, Post, RenewalOutcome, TokenStatus};
 use instapress::publication_html::{prepare_draft_text, slugify, DraftText};
@@ -162,6 +163,17 @@ fn list_posts(state: tauri::State<'_, AppState>) -> Result<Vec<Post>, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Opens the admin address of a created draft in the default browser. Only a page of the saved
+/// site is opened; see `browser::check_admin_url`.
+#[tauri::command(async)]
+fn open_in_browser(url: &str, state: tauri::State<'_, AppState>) -> Result<(), String> {
+    let saved = state.wordpress.load().map_err(|e| e.to_string())?;
+    let credentials = saved
+        .ok_or(BrowserError::NoSettings)
+        .map_err(|e| e.to_string())?;
+    browser::open_in_browser(url, credentials.site()).map_err(|e| e.to_string())
+}
+
 #[tauri::command(async)]
 fn get_wordpress_settings(state: tauri::State<'_, AppState>) -> Result<WordPressSettings, String> {
     let saved = state.wordpress.load().map_err(|e| e.to_string())?;
@@ -212,6 +224,7 @@ fn main() -> Result<()> {
         .on_menu_event(on_menu_event)
         .invoke_handler(tauri::generate_handler![
             set_layout_menu,
+            open_in_browser,
             prepare_draft,
             suggest_slug,
             token_status,

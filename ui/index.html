@@ -10,9 +10,9 @@
   <header class="app-header">
     <div class="wrap">
       <h1>Instapress</h1>
-      <div class="tabs" role="tablist" aria-label="Secciones">
-        <button type="button" role="tab" id="tab-credentials" class="tab" data-tab="credentials" aria-controls="panel-credentials" aria-selected="false">Credenciales<span id="credentials-alert" class="dot" hidden><span class="visually-hidden"> (pendiente)</span></span></button>
-        <button type="button" role="tab" id="tab-editing" class="tab" data-tab="editing" aria-controls="panel-editing" aria-selected="false" tabindex="-1">Edición</button>
+      <div class="tabs" role="tablist" aria-label="Sections">
+        <button type="button" role="tab" id="tab-credentials" class="tab" data-tab="credentials" aria-controls="panel-credentials" aria-selected="false">Credentials<span id="credentials-alert" class="dot" hidden><span class="visually-hidden"> (needs attention)</span></span></button>
+        <button type="button" role="tab" id="tab-editing" class="tab" data-tab="editing" aria-controls="panel-editing" aria-selected="false" tabindex="-1">Editing</button>
       </div>
     </div>
   </header>
@@ -60,8 +60,8 @@
           <button type="button" id="posts-refresh" class="secondary">Refresh</button>
         </div>
         <div id="posts-setup" class="setup" hidden>
-          <p>Save your Instagram token in the Credenciales tab to see your posts.</p>
-          <button type="button" id="go-credentials">Open Credenciales</button>
+          <p>Save your Instagram token in the Credentials tab to see your posts.</p>
+          <button type="button" id="go-credentials">Open Credentials</button>
         </div>
         <p id="posts-message" role="status"></p>
         <div id="posts-scroll" class="scroll-box" role="region" aria-label="Recent posts" tabindex="0" hidden>
@@ -129,9 +129,10 @@
         <p id="publish-message" role="status"></p>
         <p id="publish-warning" role="alert" hidden></p>
         <div id="publish-result" hidden>
-          <p>Open this address in your browser to review and publish it:</p>
+          <p>Review and publish the draft in WordPress:</p>
           <div class="row">
             <input id="publish-url" type="text" readonly>
+            <button type="button" id="publish-open">Open in browser</button>
             <button type="button" id="publish-copy" class="secondary">Copy</button>
           </div>
         </div>

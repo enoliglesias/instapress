@@ -3,6 +3,7 @@
 
 const COMMANDS: &[&str] = &[
     "set_layout_menu",
+    "open_in_browser",
     "prepare_draft",
     "suggest_slug",
     "token_status",

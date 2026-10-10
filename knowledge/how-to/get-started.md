@@ -49,7 +49,7 @@ The tester invitation is the step people miss: without it, generating the token 
 
 This token is *long-lived*: it lasts about 60 days. The app renews it by itself every time it starts, as long as you open it at least once before it expires.
 
-**Check:** later, in the app, **Credenciales → Instagram access → Save**, then the **Edición** tab must list your recent posts.
+**Check:** later, in the app, **Credentials → Instagram access → Save**, then the **Editing** tab must list your recent posts.
 
 ---
 
@@ -91,7 +91,7 @@ RewriteRule ^(.*) - [E=HTTP_AUTHORIZATION:%1]
 
 If the host runs Nginx or LiteSpeed with its own panel, the file does not apply: ask the host to pass the `Authorization` header to PHP (in Nginx it is `fastcgi_param HTTP_AUTHORIZATION $http_authorization;`).
 
-**Check:** in the app, **Credenciales → WordPress access** save the three values, then in the **Edición** tab create a draft of a post. If it says `rest_cannot_create` or "Sorry, you are not allowed to create posts", the header is not arriving: re-check this part and the user's role.
+**Check:** in the app, **Credentials → WordPress access** save the three values, then in the **Editing** tab create a draft of a post. If it says `rest_cannot_create` or "Sorry, you are not allowed to create posts", the header is not arriving: re-check this part and the user's role.
 
 ---
 
@@ -138,10 +138,10 @@ The app removes emoji from the title and the SEO fields, and writes them as safe
 1. Download the latest version from the [Releases page](https://github.com/enoliglesias/instapress/releases) and open **Instapress**:
    - **Windows**: run the `.exe` installer. Windows SmartScreen may say "Windows protected your PC": choose **More info**, then **Run anyway**. The app is not code-signed.
    - **macOS** (Apple Silicon): open the `.dmg` and drag Instapress to Applications. The app is not notarized, so the first time right click it and choose **Open**, or run `xattr -dr com.apple.quarantine /Applications/Instapress.app` in the Terminal.
-2. Open the **Credenciales** tab.
+2. Open the **Credentials** tab.
    - **Instagram access**: paste the token and click **Save**. The line above the box says when it expires.
    - **WordPress access**: the site address (`https://your-site.com`, the folder if WordPress is in one), the user name and the Application Password, then **Save**.
-3. Open **Edición**. Your recent posts load. Pick one: its text appears in the editor with a suggested title, slug and meta description.
+3. Open **Editing**. Your recent posts load. Pick one: its text appears in the editor with a suggested title, slug and meta description.
 4. Edit what you want, tick the categories, choose the picture and the video option, then **Create draft in WordPress**.
 5. The app shows an address. Open it, review the draft in WordPress and publish it from there. The app never publishes.
 
@@ -154,7 +154,7 @@ Your token and password are stored in the operating system's credential store (W
 | What you see | Cause | What to do |
 |---|---|---|
 | Instagram "missing access" or the login asks for permission and loops | The account has not accepted the tester invitation, or is not professional | Part 1.1 and 1.3 |
-| The Edición tab says there is no token, or "Could not renew the token" | The token expired (it lasts 60 days) | Generate a new one (1.4), paste it again |
+| The Editing tab says there is no token, or "Could not renew the token" | The token expired (it lasts 60 days) | Generate a new one (1.4), paste it again |
 | `rest_cannot_create`, "not allowed to create posts" | The `Authorization` header does not arrive, the user cannot write posts, or a security plugin blocks it | Parts 2 and 3 |
 | `incorrect_password`, `invalid_username`, 401 | Wrong user name (an e-mail or display name), or the password was not copied whole | Part 2: use the *Username*, create a new Application Password |
 | "The site redirected" | The address saved is not the final one (`http` instead of `https`, or without `www`) | Enter the address as it shows in the browser |

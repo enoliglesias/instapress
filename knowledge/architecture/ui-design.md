@@ -5,7 +5,7 @@ status: active
 
 # UI Design
 
-The frontend is static HTML, CSS and JavaScript (ADR 0002). The interface is in English; only the two tab names are in Spanish.
+The frontend is static HTML, CSS and JavaScript (ADR 0002). The interface is in English. The only Spanish text the app writes is the "Ver el vídeo" link inside the WordPress post, which is the content of the site and not of the interface.
 
 ## Palette
 The main color is the teal **#00A498**. White text on it has a contrast of only 3.1:1, which is below the 4.5:1 that text needs, so the palette separates what the teal is used for:
@@ -30,10 +30,10 @@ The dark theme follows the system setting (`prefers-color-scheme`). The neutrals
 - **Help > About Instapress** makes the backend emit an `about` event with the app version; the window opens a modal `<dialog>` with what the app does, the author (Enol Iglesias), the MIT license and a no-warranty note. It needs no new permission and no dialog plugin.
 
 ## Layouts
-- **One column** (the default): the tabs under a header that stays on screen; the content up to 760 px wide. In **Edición** the list of posts is a box of exactly four rows that scrolls inside, with the draft below it.
-- **Two columns** (View > 2 columns, from 880 px of window width; below that the one-column layout is used whatever the choice): the content widens up to 1240 px. In **Edición** the posts are on the left in a card that stays in place while the draft on the right scrolls, and the list takes the height that is left under the header instead of four rows; until a post is selected the right column says "Select a post to start a draft." In **Credenciales** the Instagram and WordPress cards sit side by side.
+- **One column** (the default): the tabs under a header that stays on screen; the content up to 760 px wide. In **Editing** the list of posts is a box of exactly four rows that scrolls inside, with the draft below it.
+- **Two columns** (View > 2 columns, from 880 px of window width; below that the one-column layout is used whatever the choice): the content widens up to 1240 px. In **Editing** the posts are on the left in a card that stays in place while the draft on the right scrolls, and the list takes the height that is left under the header instead of four rows; until a post is selected the right column says "Select a post to start a draft." In **Credentials** the Instagram and WordPress cards sit side by side.
 
 ## Pieces
-- **Tabs** follow the WAI-ARIA tabs pattern (see [`system-context.md`](system-context.md)); a dot on **Credenciales** marks that the token or the WordPress settings need attention.
+- **Tabs** follow the WAI-ARIA tabs pattern (see [`system-context.md`](system-context.md)); a dot on **Credentials** marks that the token or the WordPress settings need attention.
 - **The list of posts** has fixed-height rows (a 72 px picture and two lines of text), so four rows are always the same height. Shadows at the top and the bottom appear only on the side that has more to show.
 - **Controls** all have a visible focus ring in `--accent-text`.

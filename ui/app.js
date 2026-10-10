@@ -97,7 +97,7 @@ for (const tab of document.querySelectorAll('[role="tab"]')) {
 
 $("go-credentials").addEventListener("click", () => selectTab("credentials", { focus: true }));
 
-// What is missing before the app can work. The Credenciales tab shows a mark while any is.
+// What is missing before the app can work. The Credentials tab shows a mark while any is.
 const setup = { token: false, tokenExpired: false, wordpress: false };
 
 function updateCredentialsAlert() {
@@ -540,6 +540,14 @@ $("publish").addEventListener("click", async () => {
     show($("publish-message"), `${message}${unsure}`, true);
   } finally {
     $("publish").disabled = false;
+  }
+});
+
+$("publish-open").addEventListener("click", async () => {
+  try {
+    await invoke("open_in_browser", { url: $("publish-url").value });
+  } catch (message) {
+    show($("publish-message"), `Could not open the browser: ${message}`, true);
   }
 });
 
