@@ -18,10 +18,15 @@ The app creates a post on the user's own WordPress site through its REST API (`/
 
 Settings errors (`SettingsError`): `EmptySite`, `InvalidSite`, `EmptyUsername`, `UsernameHasColon`, `EmptyPassword`, `TooLong`.
 
+## Categories
+`list_categories` reads the categories of the site (`GET /wp-json/wp/v2/categories?per_page=100&page=N&_fields=id,name,parent`) with the same Basic credentials, a hundred at a time, up to ten pages. A page after the last one is an error in WordPress (`rest_post_invalid_page_number`); on a page past the first it only means there are no more. Without saved settings it stops with `NoSettings` and calls nothing.
+
+The window gets them as `CategoryItem { id, name, depth }` in **tree order**: each category is followed by its children, brothers are sorted by name without regard to case, `depth` is 0 for a top-level category and 1, 2... for its descendants, and a category whose parent is not in the list is shown at the top level (a loop in the parents cannot repeat or hang anything). WordPress leaves HTML entities in the names (`Lemon &amp; Limes`), so the few it writes (`&amp; &lt; &gt; &quot; &apos; &nbsp;` and numeric ones) are decoded; anything else is left as it is.
+
 ## Publishing
 `create_draft` does, in order:
 1. If there is an image, `POST /media` with the raw bytes, its real `Content-Type` and `Content-Disposition: attachment; filename="..."`. The answer's `id` becomes the featured image.
-2. `POST /posts` with a JSON body: `title`, `content` (the sanitized HTML, with a "Ver el vídeo" link before it and the Instagram player after it when there is a video), `status`, `featured_media` when there is an image, `slug` when the cleaned slug is not empty, and `meta` with `_yoast_wpseo_metadesc` (the meta description) and `_yoast_wpseo_focuskw` (the focus keyphrase) for those that are not blank.
+2. `POST /posts` with a JSON body: `title`, `content` (the sanitized HTML, with a "Ver el vídeo" link before it and the Instagram player after it when there is a video), `status`, `featured_media` when there is an image, `slug` when the cleaned slug is not empty, `categories` (a list of ids) when some are chosen, and `meta` with `_yoast_wpseo_metadesc` (the meta description) and `_yoast_wpseo_focuskw` (the focus keyphrase) for those that are not blank.
 
 The status is always `draft`: the user reviews and publishes from WordPress. Both requests use HTTP Basic authentication over HTTPS, follow no redirects and use the longer transfer timeout (see [`../architecture/http-client.md`](../architecture/http-client.md)).
 
@@ -44,8 +49,8 @@ A `db_insert_error` ("could not insert the post into the database") comes back a
 The Application Password is never in a URL, a log line or an error message.
 
 ## Order of the whole flow (`publish::publish_draft`)
-`DraftInput` is `{ title, html, image, video, slug, meta_description, focus_keyphrase }` (the last four are optional). Nothing is downloaded or sent before the cheap checks pass:
-1. The title and body are validated and sanitized, and the video choice is checked. A bad title, an empty text, a meta description over 300 characters, a focus keyphrase over 100 or a video address that is not a post or reel stops here.
+`DraftInput` is `{ title, html, image, video, slug, meta_description, focus_keyphrase, categories }` (the last five are optional). Nothing is downloaded or sent before the cheap checks pass:
+1. The title and body are validated and sanitized, and the video choice is checked. A bad title, an empty text, a meta description over 300 characters, a focus keyphrase over 100, more than 20 categories or a video address that is not a post or reel stops here.
 2. The saved settings are loaded. Without them the flow stops with `NoSettings`.
 3. The image is resolved (downloaded or decoded). A bad image stops here and nothing is created on the site.
 4. The image is uploaded, then the post is created.
