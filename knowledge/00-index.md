@@ -22,4 +22,5 @@ Living snapshot of the current state of `recipe-sync`, structured with C4 and Di
   - [`0002-static-frontend-without-node.md`](adr/0002-static-frontend-without-node.md)
   - [`0003-sanitize-html-with-ammonia.md`](adr/0003-sanitize-html-with-ammonia.md)
 - **`operational/`**
+  - [`yoast-meta-description.md`](operational/yoast-meta-description.md): why the Yoast meta description and focus keyphrase need a one-time snippet on the WordPress site, the snippet, and how the app notices when a field was not kept.
   - [`development-workflow.md`](operational/development-workflow.md): TDD, quality gates, constraints.

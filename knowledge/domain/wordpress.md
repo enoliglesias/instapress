@@ -21,11 +21,11 @@ Settings errors (`SettingsError`): `EmptySite`, `InvalidSite`, `EmptyUsername`, 
 ## Publishing
 `create_draft` does, in order:
 1. If there is an image, `POST /media` with the raw bytes, its real `Content-Type` and `Content-Disposition: attachment; filename="..."`. The answer's `id` becomes the featured image.
-2. `POST /posts` with a JSON body: `title`, `content` (the sanitized HTML, with a "Ver el vídeo" link before it and the Instagram player after it when there is a video), `status` and, when there is an image, `featured_media`.
+2. `POST /posts` with a JSON body: `title`, `content` (the sanitized HTML, with a "Ver el vídeo" link before it and the Instagram player after it when there is a video), `status`, `featured_media` when there is an image, `slug` when the cleaned slug is not empty, and `meta` with `_yoast_wpseo_metadesc` (the meta description) and `_yoast_wpseo_focuskw` (the focus keyphrase) for those that are not blank.
 
 The status is always `draft`: the user reviews and publishes from WordPress. Both requests use HTTP Basic authentication over HTTPS, follow no redirects and use the longer transfer timeout (see [`../architecture/http-client.md`](../architecture/http-client.md)).
 
-The result (`CreatedPost`) is the post `id`, its `link` (optional; for a draft WordPress reports a preview-style address) and `edit_url`, which is `{site}/wp-admin/post.php?post={id}&action=edit`. The window shows `edit_url`, because that is where the user reviews and publishes the draft.
+The result (`CreatedPost`) is the post `id`, its `link` (optional; for a draft WordPress reports a preview-style address), `meta_description_saved`, `focus_keyphrase_saved` and `edit_url`, which is `{site}/wp-admin/post.php?post={id}&action=edit`. The window shows `edit_url`, because that is where the user reviews and publishes the draft. `meta_description_saved` and `focus_keyphrase_saved` are `None` when that field was not sent, `true` when the answer holds it under `meta` and `false` when it does not: WordPress ignores a meta key that the site has not registered for the REST API, without any error, so the window warns the user. See [`../operational/yoast-meta-description.md`](../operational/yoast-meta-description.md).
 
 If the image upload succeeds and the post creation fails, the uploaded image stays in the media library; nothing is rolled back. If an answer never arrives (a timeout), the post may exist anyway: the window says so and asks the user to check the drafts in WordPress before trying again.
 
@@ -44,8 +44,8 @@ A `db_insert_error` ("could not insert the post into the database") comes back a
 The Application Password is never in a URL, a log line or an error message.
 
 ## Order of the whole flow (`publish::publish_draft`)
-`DraftInput` is `{ title, html, image, video }` (`video` is optional). Nothing is downloaded or sent before the cheap checks pass:
-1. The title and body are validated and sanitized, and the video choice is checked. A bad title, an empty text or a video address that is not a post or reel stops here.
+`DraftInput` is `{ title, html, image, video, slug, meta_description, focus_keyphrase }` (the last four are optional). Nothing is downloaded or sent before the cheap checks pass:
+1. The title and body are validated and sanitized, and the video choice is checked. A bad title, an empty text, a meta description over 300 characters, a focus keyphrase over 100 or a video address that is not a post or reel stops here.
 2. The saved settings are loaded. Without them the flow stops with `NoSettings`.
 3. The image is resolved (downloaded or decoded). A bad image stops here and nothing is created on the site.
 4. The image is uploaded, then the post is created.
