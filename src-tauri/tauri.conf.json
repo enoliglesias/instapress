@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "recipe-sync",
+  "mainBinaryName": "recipe-sync",
+  "identifier": "dev.recipesync.app",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "recipe-sync",
+        "url": "index.html",
+        "width": 960,
+        "height": 720,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self'; script-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'",
+      "freezePrototype": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Enol Iglesias, Rubén Sierra",
+    "copyright": "Copyright (c) 2026 Enol Iglesias, Rubén Sierra",
+    "category": "Utility",
+    "shortDescription": "Instagram recipe to WordPress post",
+    "longDescription": "recipe-sync reads the caption of a public Instagram post or reel, lets you edit it, and publishes it as a recipe post on a WordPress site.",
+    "licenseFile": "../LICENSE",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.ico"]
+  }
+}

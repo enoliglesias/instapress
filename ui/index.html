@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>recipe-sync</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <main>
+    <h1>recipe-sync</h1>
+    <p class="hint">Paste the URL of a public Instagram profile, post or reel.</p>
+    <form id="source-form" autocomplete="off">
+      <label for="url">Instagram URL</label>
+      <div class="row">
+        <input id="url" type="text" spellcheck="false" placeholder="https://www.instagram.com/reel/...">
+        <button type="submit">Check</button>
+      </div>
+    </form>
+    <p id="result" role="status"></p>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

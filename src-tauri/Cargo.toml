@@ -1,0 +1,26 @@
+[package]
+name = "recipe-sync"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+description = "Desktop app that turns an Instagram recipe post into a WordPress post"
+authors = ["Enol Iglesias", "Rubén Sierra"]
+license = "MIT"
+default-run = "recipe-sync"
+
+[lib]
+name = "recipe_sync"
+path = "src/lib.rs"
+
+[[bin]]
+name = "recipe-sync"
+path = "src/gui/main.rs"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", default-features = false, features = ["wry", "compression"] }
+thiserror = "2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
