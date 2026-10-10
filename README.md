@@ -15,6 +15,10 @@ Instagram has no official API for reading other people's public posts, so the ap
 
 Your Instagram token and your WordPress Application Password are kept in the operating system's credential store (Windows Credential Manager, macOS Keychain, Secret Service). The post text is cleaned before it is sent, so pasted scripts and odd markup never reach your site.
 
+## Download
+
+Get the Windows installer or the macOS disk image (Apple Silicon) from the [Releases page](https://github.com/enoliglesias/instapress/releases). Neither is signed, so the first run shows an operating system warning; the setup guide says how to get past it.
+
 ## Setup
 
 Before the first run you need an Instagram token, a WordPress Application Password and two small changes on the site. The step-by-step guide is in [`knowledge/how-to/get-started.md`](knowledge/how-to/get-started.md).

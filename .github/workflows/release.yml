@@ -1,6 +1,6 @@
 name: Release
 
-# Builds the Windows installer and attaches it to the release when it is published, or on demand
+# Builds the Windows installer and the macOS dmg and attaches them to the release when it is published, or on demand
 # for a release that already exists (Actions tab, "Run workflow", giving its tag). Nothing is
 # published from here: the release itself, and its tag, are still created by hand.
 on:
@@ -9,18 +9,28 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag of an existing release to build and attach the installer to
+        description: Tag of an existing release to build and attach the installers to
         required: true
 
 permissions:
   contents: read
 
 jobs:
-  installer:
+  installers:
     # Only this job uploads to the release.
     permissions:
       contents: write
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundle: nsis
+            files: src-tauri/target/release/bundle/nsis/*.exe
+          - os: macos-latest
+            bundle: dmg
+            files: src-tauri/target/release/bundle/dmg/*.dmg
+    runs-on: ${{ matrix.os }}
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
     steps:
@@ -46,10 +56,11 @@ jobs:
         run: cargo install tauri-cli --version 2.12.1 --locked
       - name: Build the installer
         working-directory: src-tauri
-        run: cargo tauri build --bundles nsis
+        run: cargo tauri build --bundles ${{ matrix.bundle }}
       - name: Attach it to the release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        # The pattern is left unquoted on purpose so the shell expands it.
-        run: gh release upload "$TAG" src-tauri/target/release/bundle/nsis/*.exe --clobber
+          FILES: ${{ matrix.files }}
+        # `$FILES` is left unquoted on purpose so the shell expands the pattern.
+        run: gh release upload "$TAG" $FILES --clobber

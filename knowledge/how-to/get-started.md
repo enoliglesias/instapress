@@ -135,7 +135,9 @@ The app removes emoji from the title and the SEO fields, and writes them as safe
 
 ## 6. First run
 
-1. Download the installer (or the `.exe`) of the latest version from the [Releases page](https://github.com/enoliglesias/instapress/releases), install it and open **Instapress**.
+1. Download the latest version from the [Releases page](https://github.com/enoliglesias/instapress/releases) and open **Instapress**:
+   - **Windows**: run the `.exe` installer. Windows SmartScreen may say "Windows protected your PC": choose **More info**, then **Run anyway**. The app is not code-signed.
+   - **macOS** (Apple Silicon): open the `.dmg` and drag Instapress to Applications. The app is not notarized, so the first time right click it and choose **Open**, or run `xattr -dr com.apple.quarantine /Applications/Instapress.app` in the Terminal.
 2. Open the **Credenciales** tab.
    - **Instagram access**: paste the token and click **Save**. The line above the box says when it expires.
    - **WordPress access**: the site address (`https://your-site.com`, the folder if WordPress is in one), the user name and the Application Password, then **Save**.
