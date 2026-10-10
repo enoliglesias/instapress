@@ -1,23 +1,56 @@
 name: Release
 
-# Builds the Windows installer and the macOS dmg and attaches them to the release when it is published, or on demand
-# for a release that already exists (Actions tab, "Run workflow", giving its tag). Nothing is
-# published from here: the release itself, and its tag, are still created by hand.
+# Raising `version` in src-tauri/Cargo.toml on main releases it: the workflow creates the release
+# `v<version>`, builds the Windows installer and the macOS dmg, attaches them and publishes the
+# release. A version that already has a release is left alone. Run by hand (Actions tab, "Run
+# workflow") it builds the version of the chosen branch again and replaces the attached files.
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths: [src-tauri/Cargo.toml]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Tag of an existing release to build and attach the installers to
-        required: true
 
 permissions:
   contents: read
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    # Only the jobs that create, upload to or publish the release can write.
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      build: ${{ steps.release.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the draft release unless the version is already released
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          tag="v$version"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              echo "Release $tag already exists: nothing to do."
+              echo "build=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            gh release create "$tag" --draft --target "$GITHUB_SHA" \
+              --title "Instapress $tag" --generate-notes
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+
   installers:
-    # Only this job uploads to the release.
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
     permissions:
       contents: write
     strategy:
@@ -32,19 +65,9 @@ jobs:
             files: src-tauri/target/release/bundle/dmg/*.dmg
     runs-on: ${{ matrix.os }}
     env:
-      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      TAG: ${{ needs.prepare.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.TAG }}
-      - name: Check that the tag matches the crate version
-        shell: bash
-        run: |
-          version=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
-          if [ "${TAG#v}" != "$version" ]; then
-            echo "Tag $TAG does not match the crate version $version" >&2
-            exit 1
-          fi
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -64,3 +87,16 @@ jobs:
           FILES: ${{ matrix.files }}
         # `$FILES` is left unquoted on purpose so the shell expands the pattern.
         run: gh release upload "$TAG" $FILES --clobber
+
+  publish:
+    needs: [prepare, installers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the release once both installers are attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false
