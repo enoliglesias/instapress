@@ -24,6 +24,24 @@
       <p id="token-message" role="status"></p>
     </section>
 
+    <section aria-labelledby="wp-title">
+      <h2 id="wp-title">WordPress access</h2>
+      <p id="wp-status" class="hint"></p>
+      <form id="wp-form" autocomplete="off">
+        <label for="wp-site">Site address</label>
+        <input id="wp-site" type="text" spellcheck="false" placeholder="https://your-site.com">
+        <label for="wp-user">User name</label>
+        <input id="wp-user" type="text" spellcheck="false" autocomplete="off">
+        <label for="wp-password">Application password</label>
+        <input id="wp-password" type="password" spellcheck="false" placeholder="Created in your WordPress profile">
+        <div class="row actions">
+          <button type="submit">Save</button>
+          <button type="button" id="wp-clear" class="secondary">Remove</button>
+        </div>
+      </form>
+      <p id="wp-message" role="status"></p>
+    </section>
+
     <section aria-labelledby="posts-title">
       <div class="head">
         <h2 id="posts-title">Recent posts</h2>
@@ -31,9 +49,48 @@
       </div>
       <p id="posts-message" role="status"></p>
       <ul id="posts" class="posts"></ul>
-      <div id="caption-panel" hidden>
-        <h3>Caption</h3>
-        <pre id="caption"></pre>
+    </section>
+
+    <section id="draft" aria-labelledby="draft-title" hidden>
+      <h2 id="draft-title">Draft</h2>
+      <label for="draft-title-input">Title</label>
+      <input id="draft-title-input" type="text" maxlength="200">
+
+      <span class="label" id="editor-label">Text</span>
+      <div class="toolbar" role="group" aria-label="Text formatting">
+        <button type="button" data-command="bold" class="secondary" title="Bold" aria-label="Bold"><b>B</b></button>
+        <button type="button" data-command="italic" class="secondary" title="Italic" aria-label="Italic"><i>I</i></button>
+        <button type="button" data-command="heading" class="secondary" title="Heading" aria-label="Heading">H</button>
+        <button type="button" data-command="insertUnorderedList" class="secondary" title="Bullet list" aria-label="Bullet list">&bull; List</button>
+        <button type="button" data-command="insertOrderedList" class="secondary" title="Numbered list" aria-label="Numbered list">1. List</button>
+      </div>
+      <div id="editor" class="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="editor-label"></div>
+
+      <fieldset>
+        <legend>Image</legend>
+        <label class="choice"><input type="radio" name="image" value="post" id="image-post"> <span>The post's picture</span></label>
+        <div id="image-post-preview" class="image-preview" hidden></div>
+        <label class="choice"><input type="radio" name="image" value="file" id="image-file"> <span>A file from this computer</span></label>
+        <input id="image-input" type="file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Image file" aria-describedby="image-file-info">
+        <p id="image-file-info" class="hint" role="status"></p>
+        <label class="choice"><input type="radio" name="image" value="none" id="image-none"> <span>No image</span></label>
+      </fieldset>
+
+      <fieldset id="video-options" hidden>
+        <legend>Video</legend>
+        <label class="choice"><input type="checkbox" id="video-embed"> <span>Show the post's video below the text, with a "Ver el vídeo" link at the top (Instagram player)</span></label>
+      </fieldset>
+
+      <div class="row actions">
+        <button type="button" id="publish">Create draft in WordPress</button>
+      </div>
+      <p id="publish-message" role="status"></p>
+      <div id="publish-result" hidden>
+        <p>Open this address in your browser to review and publish it:</p>
+        <div class="row">
+          <input id="publish-url" type="text" readonly>
+          <button type="button" id="publish-copy" class="secondary">Copy</button>
+        </div>
       </div>
     </section>
 
