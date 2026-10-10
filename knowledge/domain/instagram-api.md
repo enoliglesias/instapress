@@ -27,15 +27,10 @@ Each item becomes a `Post`:
 ## Errors (`ApiError`)
 - `MissingToken`: nothing saved yet.
 - `Token(..)`: the credential store failed.
-- `Network(..)`: the request did not complete. The text is one of three fixed phrases (`timed out`, `could not connect`, `transport error`), never the transport error itself.
+- `Network(..)`: the request did not complete. The text is one of the fixed phrases of the shared HTTP client (see [`../architecture/http-client.md`](../architecture/http-client.md)), never the transport error itself.
 - `Api { code, message }`: Instagram answered with its error envelope (for example an expired token, code 190). The envelope is checked first and wins over the status. The message comes from Instagram.
 - `Status(code)`: any other non-2xx status, whatever the body, so a failure is never read as an empty account. A redirect is a `Status` too because redirects are not followed.
 - `Malformed(..)`: a 2xx response whose body is not the expected JSON.
 
-## HTTP client
-HTTP goes through the `HttpGet` trait, so tests use a fake and never touch the network. The real client (`UreqClient`):
-- does not treat 4xx/5xx as errors, so the error body can be read;
-- sends the token as `Authorization: Bearer`, never in the URL or the query string, so it cannot appear in a logged or reported request line;
-- is HTTPS only and follows no redirects, so the header cannot travel to another host;
-- has a 20 second global timeout;
-- never puts the request details in an error: transport failures are reduced to fixed phrases.
+## HTTP
+The call goes through the `HttpGet` trait, so tests use a fake and never touch the network. The real implementation is the shared client in [`../architecture/http-client.md`](../architecture/http-client.md): HTTPS only, no redirects, the token sent as `Authorization: Bearer` and never in the URL, and a 20 second timeout for this call.

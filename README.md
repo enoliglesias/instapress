@@ -1,17 +1,19 @@
 # recipe-sync
 
-Desktop app (Rust and Tauri v2) that turns an Instagram recipe into a WordPress post:
+Desktop app (Rust and Tauri v2) that turns one of your own Instagram recipes into a WordPress draft:
 
-1. Paste the URL of a public Instagram profile, post or reel.
-2. The caption is extracted and loaded into an editable rich text editor.
-3. Attach a photo, or use the post's own image or a screenshot of it.
-4. Publish it as a post on your WordPress site.
+1. Connect your Instagram account with an access token and pick one of your recent posts or reels.
+2. Its caption is loaded into an editable rich text editor, with a suggested title.
+3. Choose the picture: the post's own image, a file from your computer, or none.
+4. Create the post on your WordPress site. It is always created as a **draft**, so you review and publish it from WordPress.
 
 ## Status
 
-Early scaffold. Only step 1 is partly there: the window recognizes whether a URL is a profile, a post or a reel. Caption extraction, the editor, images and the WordPress client are not implemented yet.
+Working end to end for the first 25 posts of the connected account. Not implemented yet: token refresh, more than 25 posts, screenshots of a post, categories and tags, and publishing directly.
 
-Instagram has no official API for reading other people's public posts, so extraction is best-effort and will always have a manual paste fallback. Only publish content you own or have permission to use.
+Instagram has no official API for reading other people's public posts, so the app only reads the account that owns the token (an Instagram professional account that is a tester of your Meta app). Only publish content you own or have permission to use.
+
+Your Instagram token and your WordPress Application Password are kept in the operating system's credential store (Windows Credential Manager, macOS Keychain, Secret Service). The post text is cleaned before it is sent, so pasted scripts and odd markup never reach your site.
 
 ## Development
 

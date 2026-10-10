@@ -6,44 +6,61 @@ status: active
 # System Context
 
 ## Purpose
-recipe-sync is a desktop app that loads the caption and image of one of the user's own Instagram posts or reels, lets the user edit the text in a rich text editor with a photo attached, and publishes it as a recipe post on a WordPress site.
+recipe-sync is a desktop app that loads the caption and image of one of the user's own Instagram posts or reels, lets the user edit the text in a rich text editor with a photo attached, and creates it as a recipe post (a draft) on a WordPress site.
 
 ## Context (C4 level 1)
 - **User**: the person who curates recipes and owns or has permission to publish the content.
 - **Instagram API** (external): `graph.instagram.com`, Instagram Login flavor, read-only, for the user's own account. Scraping the public web does not work: without a session Instagram serves an empty page with no caption.
-- **WordPress site** (external): target of the published post, reached through its REST API with an Application Password stored in the OS credential store. Not implemented yet.
+- **Instagram image CDN** (external): the backend downloads the post's picture from `*.cdninstagram.com` or `*.fbcdn.net` when the user chooses it as the post image.
+- **WordPress site** (external): target of the post, reached through its REST API with an Application Password stored in the OS credential store.
 
 ## What exists today
-- The main window shows a settings block (paste or remove the Instagram access token) and the list of the account's recent posts with preview, date and caption; selecting one shows its full caption. See [`../domain/instagram-api.md`](../domain/instagram-api.md).
-- The window also classifies a pasted Instagram URL as a profile, post or reel. See [`../domain/instagram-url.md`](../domain/instagram-url.md).
+- The main window has five blocks: Instagram access, WordPress access, recent posts, the draft (hidden until a post is selected) and a small URL checker.
+- Selecting a post fills the draft with its caption (title, editable rich text) and lets the user choose the image. "Create draft" sends the post to WordPress as a draft and shows the address where it can be reviewed and published.
+- The URL checker classifies a pasted Instagram URL as a profile, post or reel. It is not connected to the draft.
+
+See [`../domain/instagram-api.md`](../domain/instagram-api.md), [`../domain/recipe-draft.md`](../domain/recipe-draft.md), [`../domain/wordpress.md`](../domain/wordpress.md), [`../domain/instagram-url.md`](../domain/instagram-url.md) and [`http-client.md`](http-client.md).
 
 ## Not implemented yet
-Rich text editor, image attachment or capture, the WordPress client and its credentials, token refresh and paging beyond the first 25 posts. Each will be documented here when it exists.
+Token refresh, paging beyond the first 25 posts, screenshots of a post, categories and tags, scheduling and publishing directly (posts are always created as drafts), and carousel images beyond whatever single picture the API reports for the album.
 
 ## Containers (C4 level 2)
 One Tauri v2 process:
-- **Rust backend** (`src-tauri/`): library crate `recipe_sync` plus the binary `recipe-sync` (`src/gui/main.rs`).
+- **Rust backend** (`src-tauri/`): library crate `recipe_sync` plus the binary `recipe-sync` (`src/gui/main.rs`). The binary keeps one `AppState` with the Instagram token store, the WordPress settings store and one HTTP client.
 - **Static frontend** (`ui/`): `index.html`, `app.css`, `app.js`, embedded at compile time and talking to the backend through Tauri IPC (`withGlobalTauri`).
 
 ## Modules
 - `instagram_url`: pure URL classification.
-- `token`: `AccessToken` newtype, the `TokenStore` trait and the OS credential store adapter (`KeyringStore`).
-- `instagram_api`: `HttpGet` trait and its `ureq` implementation, response parsing, `Post`, `ApiError` and `list_recent_posts`.
+- `token`: `AccessToken`, the `TokenStore` trait and `KeyringStore`, plus `OsSecret`, the one named secret of the OS credential store that the Instagram and WordPress stores share (service `recipe-sync`, a different user name for each).
+- `http`: the blocking `ureq` client and its rules (see [`http-client.md`](http-client.md)).
+- `instagram_api`: the `HttpGet` trait, response parsing, `Post`, `ApiError`, `list_recent_posts` and the trusted image host check.
+- `recipe_html`: caption to HTML, title suggestion, HTML sanitizing and the validated `RecipeDraft`.
+- `image`: `Image`, the three `ImageChoice`s, `data:` URL decoding, the `ImageFetcher` trait and `ImageError`.
+- `wordpress`: `SiteUrl`, `AppPassword`, `WpCredentials`, the `CredentialsStore` trait and `KeyringCredentials`, the `WpHttp` trait, `create_draft`, `CreatedPost` and `WordPressError`.
+- `video`: the Instagram player that can go below the text of a draft, and the link that jumps to it (`VideoChoice`, `VideoEmbed`).
+- `publish`: `DraftInput`, `PublishError` and `publish_draft`, the whole flow in the order that spends the least.
 
 ## IPC commands
 All are thin adapters over the library, declared in `build.rs` and granted to the `main` window in `capabilities/main.json`. Errors reach the frontend as plain strings. The autogenerated `permissions/autogenerated/*.toml` files that Tauri derives from `build.rs` are committed.
-- `classify_instagram_url(url)`: pure and fast, runs inline.
-- `has_token()`, `save_token(token)`, `clear_token()`: `#[tauri::command(async)]`, so the blocking credential store never stalls the UI thread.
-- `list_posts()`: `#[tauri::command(async)]`, wraps `instagram_api::list_recent_posts`; the HTTP client blocks. There is no async runtime of our own (ADR 0001).
+- `classify_instagram_url(url)`, `prepare_draft(caption)`: pure and fast, run inline.
+- `has_token()`, `save_token(token)`, `clear_token()`: Instagram token.
+- `get_wordpress_settings()`, `save_wordpress_settings(site, username, app_password)`, `clear_wordpress_settings()`: WordPress access. The first returns `{ site, username, has_password }`, never the password.
+- `list_posts()`, `create_wordpress_draft(draft)`: network work.
+
+Every command that touches the credential store or the network is `#[tauri::command(async)]`, so it runs on Tauri's own runtime instead of the UI thread. Such a command holds one of that runtime's workers while it waits, which the client timeouts bound. There is no async runtime of our own (ADR 0001).
 
 ## Main window behavior
-- On start, if a token is saved the recent posts load automatically; saving a token reloads them and removing it clears the list. A Refresh button reloads them and the token field is a password input.
-- Each post shows a 72 px preview, a type label (Photo, Reel or video, Album, Post), the date in the viewer's locale and the first 140 characters of the caption, or "(no caption)". Selecting one shows the full caption in a panel.
-- Everything Instagram sends is rendered as text (`textContent`), never as HTML. Thumbnails load with `referrerPolicy="no-referrer"` and `loading="lazy"`. An unreadable timestamp shows no date.
-- Only the newest list request may update the page and Refresh is disabled while one is in flight. The token field is emptied as soon as Save is pressed, whether or not the save works.
+- On start, if an Instagram token is saved the recent posts load automatically; saving a token reloads them and removing it clears the list. A Refresh button reloads them. Only the newest list request may update the page and Refresh is disabled while one is in flight.
+- Each post shows a 72 px preview, a type label (Photo, Reel or video, Album, Post), the date in the viewer's locale and the first 140 characters of the caption, or "(no caption)". Selecting one opens the draft and moves the focus to its title.
+- The draft has a title field (at most 200 characters), a rich text editor, the image choice, a "show the video" checkbox that appears only for video posts and a "Create draft" button. The toolbar (bold, italic, heading, bullet list, numbered list) has an accessible name on every button; pressing the heading button on a heading turns it back into a paragraph. Pasting into the editor inserts plain text.
+- The image choice defaults to the post's picture, with a 96 px preview, and to "No image" when the post has none (the option is then disabled). Choosing a file shows its name and size, rejects one over 10 MB and selects the file option. If the file option is selected with no file read, publishing is blocked with a message.
+- After "Create draft" the window shows the edit address in a read-only field with a Copy button; if the clipboard is not available it selects the text and says to copy it by hand. If the answer never arrived, the message adds that the draft may still exist.
+- Everything Instagram or WordPress sends is rendered as text (`textContent`), never as HTML. The editor is the only HTML the page produces: it is filled with HTML that the backend built with every special character escaped, and its content goes back to the backend, which sanitizes it before sending it on.
+- Errors are announced as alerts, everything else as status messages.
+- Secret fields (Instagram token, Application Password) are password inputs and are emptied as soon as Save is pressed, whether or not the save works. The WordPress site and user name are shown again from the saved settings.
 
 ## Security
-Content Security Policy allows same-origin scripts and styles, `connect-src` only for the Tauri IPC endpoint (`ipc:` and `http://ipc.localhost`) and `img-src` limited to the app itself and the Instagram CDN (`*.cdninstagram.com`, `*.fbcdn.net`), with no `data:` images; `freezePrototype` is on. All HTTP requests are made by the Rust backend, never by the webview. The access token lives only in the OS credential store and is never sent to the frontend or logged.
+Content Security Policy: `default-src 'self'`, `script-src 'self'`, `style-src 'self'`, `connect-src` only for the Tauri IPC endpoint (`ipc:` and `http://ipc.localhost`), `img-src` limited to the app itself and the Instagram CDN (`*.cdninstagram.com`, `*.fbcdn.net`) with no `data:` images, and `base-uri`, `form-action`, `object-src` and `frame-ancestors` all `'none'`. `freezePrototype` is on. All HTTP requests are made by the Rust backend, never by the webview. The Instagram token and the Application Password live only in the OS credential store and are never sent back to the frontend or logged. The capability grants the window exactly the ten commands above and no core, file, shell or HTTP permission.
 
 ## Dependencies
-`tauri` (without default features), `ureq` with `rustls` (blocking HTTP), `keyring` (OS credential store), `serde`/`serde_json`, `thiserror` and `anyhow`.
+`tauri` (without default features), `ureq` with `rustls` (blocking HTTP), `keyring` (OS credential store), `serde`/`serde_json`, `base64` (data URLs and HTTP Basic), `ammonia` (HTML sanitizing, ADR 0003), `thiserror` and `anyhow`.

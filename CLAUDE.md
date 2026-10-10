@@ -4,13 +4,14 @@ Guidelines for working in this repository (`recipe-sync`, a Rust & Tauri desktop
 
 ## What the app does
 
-Takes the URL of a public Instagram profile, reel or post, extracts the caption text, loads it into an editable rich text editor, lets the user attach a photo (or use the post's own image or a screenshot of it), and publishes the result as a recipe post on a WordPress site through its REST API.
+Loads the caption and image of one of the user's own Instagram posts or reels through the Instagram API (the user's access token, kept in the OS credential store), puts the caption into an editable rich text editor, lets the user choose the picture (the post's own image, a file, or none), and creates the result as a recipe post on a WordPress site through its REST API. The post is always created as a draft: the user reviews and publishes it from WordPress.
 
 Product constraints to keep in mind:
 
-- Instagram has no official API for reading third-party public posts. Extraction is best-effort and must degrade gracefully (clear error, and a manual paste fallback).
-- Publishing someone else's text or photos requires their permission. The UI should make the origin of the content visible and never publish without an explicit user action.
-- WordPress credentials use Application Passwords and live in the OS credential store, never in plain files or logs.
+- Instagram has no official API for reading other people's public posts and scraping the public web does not return captions. The app reads only the account that owns the token.
+- Publishing someone else's text or photos requires their permission. The UI should make the origin of the content visible and never create a post without an explicit user action.
+- The Instagram token and the WordPress Application Password live in the OS credential store, never in plain files, URLs, logs or error messages, and are never sent back to the webview.
+- The editor's HTML is untrusted: it is sanitized in the backend before it leaves the app.
 
 ## Agents & Skills Configuration
 

@@ -16,4 +16,4 @@ We need a small cross-platform desktop app that fetches web content, edits it an
 ## Consequences
 - Strict adherence to the Rust guidelines in `CLAUDE.md` and to Tauri capabilities (each window gets only the commands it needs).
 - Small installers and low memory use compared with Electron.
-- There is no async runtime of our own. Network and credential store access use blocking clients (`ureq`, `keyring`) and the commands that call them are `#[tauri::command(async)]`, which Tauri runs on a worker thread so the UI thread never blocks. Revisit this if the app needs concurrent requests.
+- There is no async runtime of our own. Network and credential store access use blocking clients (`ureq`, `keyring`) and the commands that call them are `#[tauri::command(async)]`, which Tauri runs on its own runtime so the UI thread never blocks. Each such command holds a worker of that runtime while it waits, which the client timeouts bound. Revisit this if the app needs concurrent requests or long waits.
