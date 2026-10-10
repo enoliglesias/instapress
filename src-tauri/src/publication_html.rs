@@ -1,7 +1,7 @@
-//! The text of a recipe draft: caption to HTML, a suggested title, and sanitizing.
+//! The text of a publication draft: caption to HTML, a suggested title, and sanitizing.
 //!
 //! The editor in the webview is a `contenteditable` element, so its HTML is untrusted. Everything
-//! that goes to WordPress passes through [`RecipeDraft::new`], which cleans it with an allow-list.
+//! that goes to WordPress passes through [`PublicationDraft::new`], which cleans it with an allow-list.
 
 use std::collections::{HashMap, HashSet};
 
@@ -56,7 +56,7 @@ pub enum DraftError {
     TooManyCategories { count: usize, max: usize },
 }
 
-/// The titles of the sections of a recipe, as they are written once accents and case are folded
+/// The titles of the sections of a publication, as they are written once accents and case are folded
 /// away. Where one starts with another the longer one comes first.
 const SECTION_HEADINGS: [&str; 15] = [
     "lista de ingredientes",
@@ -117,7 +117,7 @@ fn is_heading_qualifier(rest: &str) -> bool {
     }
 }
 
-/// The text of `line` when it only names a section of the recipe, such as `Ingredientes`,
+/// The text of `line` when it only names a section of the publication, such as `Ingredientes`,
 /// `🥕 INGREDIENTES para 3 personas:` or `Elaboración`; `None` for any other line.
 ///
 /// Emoji, punctuation and other decoration around the title are dropped. A line that goes on
@@ -172,7 +172,7 @@ fn parse_blocks(text: &str) -> Vec<Block<'_>> {
 }
 
 /// Turns a plain-text caption into HTML: a blank line starts a paragraph, a single newline is a
-/// line break, a line that names a section of the recipe (`Ingredientes`, `Elaboración`...)
+/// line break, a line that names a section of the publication (`Ingredientes`, `Elaboración`...)
 /// becomes an `<h2>`, and everything special in HTML is escaped.
 pub fn caption_to_html(caption: &str) -> String {
     let normalized = caption.replace("\r\n", "\n").replace('\r', "\n");
@@ -443,7 +443,7 @@ fn has_visible_text(html: &str) -> bool {
 /// optional Instagram player to show below the text, and the optional slug, meta description and
 /// focus keyphrase.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecipeDraft {
+pub struct PublicationDraft {
     title: String,
     html: String,
     image: Option<Image>,
@@ -454,7 +454,7 @@ pub struct RecipeDraft {
     categories: Vec<u64>,
 }
 
-impl RecipeDraft {
+impl PublicationDraft {
     /// Collapses the title to one line, sanitizes the body and rejects an empty title or text.
     ///
     /// Four-byte characters (emoji) are removed from the title and written as HTML entities in
@@ -864,7 +864,7 @@ mod tests {
 
     #[test]
     fn a_draft_cleans_the_slug_it_is_given() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>")
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>")
             .unwrap()
             .with_slug("Aida 💚 Lídice");
         assert_eq!(draft.slug(), Some("aida-lidice"));
@@ -876,7 +876,7 @@ mod tests {
 
     #[test]
     fn a_draft_cleans_the_meta_description_it_is_given() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>")
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>")
             .unwrap()
             .with_meta_description("  Una  tarta\n 💚 cremosa  ")
             .unwrap();
@@ -887,7 +887,7 @@ mod tests {
 
     #[test]
     fn a_meta_description_that_is_too_long_is_rejected() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>").unwrap();
         assert!(draft
             .clone()
             .with_meta_description(&"a".repeat(300))
@@ -903,7 +903,7 @@ mod tests {
 
     #[test]
     fn a_draft_cleans_the_focus_keyphrase_it_is_given() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>")
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>")
             .unwrap()
             .with_focus_keyphrase("  tarta  de\n queso 💚 vegana ")
             .unwrap();
@@ -915,7 +915,7 @@ mod tests {
 
     #[test]
     fn a_focus_keyphrase_that_is_too_long_is_rejected() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>").unwrap();
         assert!(draft.clone().with_focus_keyphrase(&"a".repeat(100)).is_ok());
         assert_eq!(
             draft.with_focus_keyphrase(&"a".repeat(101)),
@@ -928,7 +928,7 @@ mod tests {
 
     #[test]
     fn a_draft_keeps_its_categories_without_repeats_or_zeros() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>")
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>")
             .unwrap()
             .with_categories(&[7, 3, 7, 0, 12, 3])
             .unwrap();
@@ -939,7 +939,7 @@ mod tests {
 
     #[test]
     fn too_many_categories_are_rejected() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>").unwrap();
         let twenty: Vec<u64> = (1..=20).collect();
         assert!(draft.clone().with_categories(&twenty).is_ok());
         let twenty_one: Vec<u64> = (1..=21).collect();
@@ -951,7 +951,7 @@ mod tests {
 
     #[test]
     fn a_draft_without_slug_or_description_has_none() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>").unwrap();
         assert_eq!(draft.slug(), None);
         assert_eq!(draft.meta_description(), None);
         assert_eq!(draft.focus_keyphrase(), None);
@@ -967,7 +967,7 @@ mod tests {
     #[test]
     fn a_draft_built_from_the_start_keeps_the_headings() {
         let text = prepare_draft_text("Pan\nIngredientes\n200 g\nElaboración\nMezcla");
-        let draft = RecipeDraft::new(&text.title, &text.html).unwrap();
+        let draft = PublicationDraft::new(&text.title, &text.html).unwrap();
         assert_eq!(draft.title(), "Pan");
         assert_eq!(
             draft.html(),
@@ -1065,7 +1065,7 @@ mod tests {
 
     #[test]
     fn a_draft_never_holds_a_four_byte_character() {
-        let draft = RecipeDraft::new(
+        let draft = PublicationDraft::new(
             "Aida Lídice 💚🌱 Recetas 𝗥𝗲𝗰𝗲𝘁𝗮",
             "<p>Hola 💚</p><p><strong>Paso 1 🌱</strong></p><a href=\"https://x.test/😀\">x</a>",
         )
@@ -1082,40 +1082,40 @@ mod tests {
 
     #[test]
     fn emoji_in_the_title_are_removed_and_the_spaces_collapse() {
-        let draft = RecipeDraft::new("Aida Lídice 💚 🌱 Recetas", "<p>Hola</p>").unwrap();
+        let draft = PublicationDraft::new("Aida Lídice 💚 🌱 Recetas", "<p>Hola</p>").unwrap();
         assert_eq!(draft.title(), "Aida Lídice Recetas");
-        let draft = RecipeDraft::new("💚Tarta de queso🌱", "<p>Hola</p>").unwrap();
+        let draft = PublicationDraft::new("💚Tarta de queso🌱", "<p>Hola</p>").unwrap();
         assert_eq!(draft.title(), "Tarta de queso");
     }
 
     #[test]
     fn a_title_that_is_only_emoji_is_empty() {
         assert_eq!(
-            RecipeDraft::new("💚🌱", "<p>Hola</p>"),
+            PublicationDraft::new("💚🌱", "<p>Hola</p>"),
             Err(DraftError::EmptyTitle)
         );
     }
 
     #[test]
     fn a_body_that_is_only_an_emoji_still_counts_as_text() {
-        let draft = RecipeDraft::new("Titulo", "<p>💚</p>").unwrap();
+        let draft = PublicationDraft::new("Titulo", "<p>💚</p>").unwrap();
         assert_eq!(draft.html(), "<p>&#x1F49A;</p>");
     }
 
     #[test]
     fn the_title_limit_counts_what_is_sent() {
         let title = format!("{}💚", "a".repeat(200));
-        assert!(RecipeDraft::new(&title, "<p>Hola</p>").is_ok());
+        assert!(PublicationDraft::new(&title, "<p>Hola</p>").is_ok());
         let title = format!("{}💚", "a".repeat(201));
         assert!(matches!(
-            RecipeDraft::new(&title, "<p>Hola</p>"),
+            PublicationDraft::new(&title, "<p>Hola</p>"),
             Err(DraftError::TitleTooLong { length: 201, .. })
         ));
     }
 
     #[test]
     fn without_a_player_the_content_is_the_body() {
-        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>").unwrap();
         assert_eq!(draft.content(), "<p>Hola</p>");
         assert!(draft.video().is_none());
     }
@@ -1123,7 +1123,7 @@ mod tests {
     #[test]
     fn the_link_comes_first_then_the_body_and_the_player_last() {
         let embed = VideoEmbed::from_permalink("https://www.instagram.com/reel/DJrCx/").unwrap();
-        let draft = RecipeDraft::new("Titulo", "<p>Hola 💚</p>")
+        let draft = PublicationDraft::new("Titulo", "<p>Hola 💚</p>")
             .unwrap()
             .with_video(Some(embed.clone()));
         let content = draft.content();
@@ -1147,7 +1147,7 @@ mod tests {
 
     #[test]
     fn an_iframe_in_the_editor_is_still_removed() {
-        let draft = RecipeDraft::new(
+        let draft = PublicationDraft::new(
             "Titulo",
             "<p>Hola</p><iframe src=\"https://evil.test\"></iframe>",
         )
@@ -1157,7 +1157,7 @@ mod tests {
 
     #[test]
     fn a_visible_entity_is_still_text() {
-        assert!(RecipeDraft::new("Titulo", "<p>&amp;</p>").is_ok());
+        assert!(PublicationDraft::new("Titulo", "<p>&amp;</p>").is_ok());
     }
 
     #[test]
@@ -1243,7 +1243,8 @@ mod tests {
     #[test]
     fn a_draft_cleans_the_body_and_collapses_the_title() {
         let draft =
-            RecipeDraft::new("  Tarta \n de   queso ", "<p>Hola</p><script>x</script>").unwrap();
+            PublicationDraft::new("  Tarta \n de   queso ", "<p>Hola</p><script>x</script>")
+                .unwrap();
         assert_eq!(draft.title(), "Tarta de queso");
         assert_eq!(draft.html(), "<p>Hola</p>");
         assert!(draft.image().is_none());
@@ -1252,7 +1253,7 @@ mod tests {
     #[test]
     fn a_draft_needs_a_title() {
         assert_eq!(
-            RecipeDraft::new(" \n ", "<p>Hola</p>"),
+            PublicationDraft::new(" \n ", "<p>Hola</p>"),
             Err(DraftError::EmptyTitle)
         );
     }
@@ -1260,13 +1261,13 @@ mod tests {
     #[test]
     fn a_draft_rejects_a_title_over_the_limit() {
         assert_eq!(
-            RecipeDraft::new(&"a".repeat(201), "<p>Hola</p>"),
+            PublicationDraft::new(&"a".repeat(201), "<p>Hola</p>"),
             Err(DraftError::TitleTooLong {
                 length: 201,
                 max: 200
             })
         );
-        assert!(RecipeDraft::new(&"a".repeat(200), "<p>Hola</p>").is_ok());
+        assert!(PublicationDraft::new(&"a".repeat(200), "<p>Hola</p>").is_ok());
     }
 
     #[test]
@@ -1281,7 +1282,7 @@ mod tests {
             "<p>\u{a0}</p>",
         ] {
             assert_eq!(
-                RecipeDraft::new("Titulo", html),
+                PublicationDraft::new("Titulo", html),
                 Err(DraftError::EmptyBody),
                 "{html:?}"
             );

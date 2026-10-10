@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::http::{HttpResponse, UreqClient};
-use crate::recipe_html::RecipeDraft;
+use crate::publication_html::PublicationDraft;
 use crate::token::{OsSecret, TokenError};
 
 const WORDPRESS_SECRET: OsSecret = OsSecret::new("wordpress");
@@ -503,7 +503,7 @@ fn created(response: HttpResponse) -> Result<WpCreated, WordPressError> {
 pub fn create_draft<H: WpHttp>(
     http: &H,
     credentials: &WpCredentials,
-    draft: &RecipeDraft,
+    draft: &PublicationDraft,
 ) -> Result<CreatedPost, WordPressError> {
     let authorization = credentials.authorization();
     let site = credentials.site.as_str();
@@ -664,8 +664,8 @@ pub(crate) mod tests {
             .map(|(_, v)| v.as_str())
     }
 
-    fn draft() -> RecipeDraft {
-        RecipeDraft::new("Fabada vegana", "<p>Con fabes</p>").unwrap()
+    fn draft() -> PublicationDraft {
+        PublicationDraft::new("Fabada vegana", "<p>Con fabes</p>").unwrap()
     }
 
     #[test]
@@ -810,7 +810,7 @@ pub(crate) mod tests {
         );
     }
 
-    fn seo_draft() -> RecipeDraft {
+    fn seo_draft() -> PublicationDraft {
         draft()
             .with_slug("Fabada vegana 💚")
             .with_meta_description("Una fabada vegana cremosa y fácil.")
@@ -835,7 +835,7 @@ pub(crate) mod tests {
         );
     }
 
-    fn full_seo_draft() -> RecipeDraft {
+    fn full_seo_draft() -> PublicationDraft {
         seo_draft().with_focus_keyphrase("fabada vegana").unwrap()
     }
 

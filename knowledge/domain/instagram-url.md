@@ -26,4 +26,4 @@ A shortcode is one or more of `A-Z a-z 0-9 _ -`. A username is 1 to 30 of `A-Z a
 - `NotInstagram(input)`: the host is not an Instagram host.
 - `Unsupported(input)`: an Instagram URL that is not one of the shapes above, including malformed shortcodes and usernames. Every error names the input.
 
-The window does not use this module directly: it is what accepts the address of a post or a reel for the video player (see [`recipe-draft.md`](recipe-draft.md)).
+The window does not use this module directly: it is what accepts the address of a post or a reel for the video player (see [`publication-draft.md`](publication-draft.md)).

@@ -5,7 +5,7 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use crate::image::{resolve, ImageChoice, ImageError, ImageFetcher};
-use crate::recipe_html::{DraftError, RecipeDraft};
+use crate::publication_html::{DraftError, PublicationDraft};
 use crate::video::{self, VideoChoice, VideoError};
 use crate::wordpress::{create_draft, CreatedPost, CredentialsStore, WordPressError, WpHttp};
 
@@ -59,7 +59,7 @@ where
     H: WpHttp,
     F: ImageFetcher,
 {
-    let draft = RecipeDraft::new(&input.title, &input.html)?
+    let draft = PublicationDraft::new(&input.title, &input.html)?
         .with_slug(&input.slug)
         .with_meta_description(&input.meta_description)?
         .with_focus_keyphrase(&input.focus_keyphrase)?

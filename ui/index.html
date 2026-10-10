@@ -11,8 +11,8 @@
     <div class="wrap">
       <h1>Instapress</h1>
       <div class="tabs" role="tablist" aria-label="Secciones">
-        <button type="button" role="tab" id="tab-credentials" class="tab" data-tab="credentials" aria-controls="panel-credentials" aria-selected="false" tabindex="-1">Credenciales<span id="credentials-alert" class="dot" hidden><span class="visually-hidden"> (pendiente)</span></span></button>
-        <button type="button" role="tab" id="tab-editing" class="tab" data-tab="editing" aria-controls="panel-editing" aria-selected="true">Edición</button>
+        <button type="button" role="tab" id="tab-credentials" class="tab" data-tab="credentials" aria-controls="panel-credentials" aria-selected="false">Credenciales<span id="credentials-alert" class="dot" hidden><span class="visually-hidden"> (pendiente)</span></span></button>
+        <button type="button" role="tab" id="tab-editing" class="tab" data-tab="editing" aria-controls="panel-editing" aria-selected="false" tabindex="-1">Edición</button>
       </div>
     </div>
   </header>
@@ -53,7 +53,7 @@
       </section>
     </div>
 
-    <div role="tabpanel" id="panel-editing" aria-labelledby="tab-editing" tabindex="0">
+    <div role="tabpanel" id="panel-editing" aria-labelledby="tab-editing" tabindex="0" hidden>
       <section class="card posts-card" aria-labelledby="posts-title">
         <div class="head">
           <h2 id="posts-title">Recent posts</h2>
@@ -144,7 +144,7 @@
   </main>
   <dialog id="about" aria-labelledby="about-title">
     <h2 id="about-title">Instapress <span id="about-version" class="hint"></span></h2>
-    <p>Turns your own Instagram recipe posts into WordPress drafts: it loads your posts, lets you edit the caption (title, text, categories, image, video, slug and SEO fields) and creates the result as a draft on your site through the WordPress REST API. Nothing is published until you review the draft in WordPress.</p>
+    <p>Turns your own Instagram posts into WordPress drafts: it loads your posts, lets you edit the caption (title, text, categories, image, video, slug and SEO fields) and creates the result as a draft on your site through the WordPress REST API. Nothing is published until you review the draft in WordPress.</p>
     <p>Your Instagram token and your WordPress application password are kept in the operating system's credential store.</p>
     <p>Created by Enol Iglesias.<br>Released under the MIT License. Copyright &copy; 2026 Enol Iglesias.</p>
     <p class="hint">Provided "as is", without warranty of any kind. Not affiliated with or endorsed by Meta, Instagram or WordPress.</p>

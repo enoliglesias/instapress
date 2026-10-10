@@ -55,12 +55,16 @@ window.__TAURI__.event.listen("layout", (event) => {
 
 window.__TAURI__.event.listen("about", (event) => {
   $("about-version").textContent = `version ${event.payload}`;
-  $("about").showModal();
+  const dialog = $("about");
+  // Choosing About again while it is open must not throw.
+  if (!dialog.open) dialog.showModal();
 });
 
 $("about-close").addEventListener("click", () => $("about").close());
 
 // --- Tabs ---
+// Both panels start hidden: start() picks the tab once it knows what is saved, so the window
+// never shows the wrong one for a moment.
 
 const TAB_NAMES = ["credentials", "editing"];
 

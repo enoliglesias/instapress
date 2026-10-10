@@ -1,4 +1,4 @@
-//! The picture of a recipe draft and the three ways to get it.
+//! The picture of a publication draft and the three ways to get it.
 //!
 //! The type of an image is read from its first bytes, never from what a file name, a `data:` URL
 //! or a server claims, and the file name sent on is reduced to safe characters.
@@ -14,7 +14,7 @@ use crate::instagram_api::is_trusted_image_url;
 
 /// The largest image accepted, in bytes.
 pub const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
-const DEFAULT_NAME: &str = "recipe-image";
+const DEFAULT_NAME: &str = "publication-image";
 const MAX_NAME_CHARS: usize = 60;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -306,13 +306,13 @@ mod tests {
         for (name, stem) in [
             ("../../etc/evil.php", "evil"),
             ("C:\\Users\\me\\Mi foto (1).JPG", "Mi-foto-1"),
-            ("   ", "recipe-image"),
-            (".htaccess", "recipe-image"),
+            ("   ", "publication-image"),
+            (".htaccess", "publication-image"),
             ("tarta_de_queso.webp", "tarta_de_queso"),
             ("  --a b--  ", "a-b"),
             ("a\"; filename=\"b", "a-filename-b"),
             ("Tarta ñandú.png", "Tarta-and"),
-            ("ñ\u{1f600}.png", "recipe-image"),
+            ("ñ\u{1f600}.png", "publication-image"),
             ("a\r\nX-Evil: 1.png", "a-X-Evil-1"),
         ] {
             let image = Image::new(name, PNG.to_vec()).unwrap();
@@ -349,7 +349,7 @@ mod tests {
         let image = resolve(ImageChoice::PostImage { url: url.into() }, &fetcher)
             .unwrap()
             .unwrap();
-        assert_eq!(image.filename(), "recipe-image.png");
+        assert_eq!(image.filename(), "publication-image.png");
         assert_eq!(*fetcher.asked.borrow(), [url]);
     }
 

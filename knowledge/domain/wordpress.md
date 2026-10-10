@@ -43,7 +43,7 @@ If the image upload succeeds and the post creation fails, the uploaded image sta
 - `Redirect(status)`: the site redirected; the message tells the user to enter the final address. A redirect on the image upload stops everything before a post is created.
 - `Status(code)`: any other non-2xx status without a readable error body.
 
-A `db_insert_error` ("could not insert the post into the database") comes back as an `Api` error. On a site whose database cannot store four-byte characters it was caused by emoji; the app now never sends them (see [`recipe-draft.md`](recipe-draft.md)).
+A `db_insert_error` ("could not insert the post into the database") comes back as an `Api` error. On a site whose database cannot store four-byte characters it was caused by emoji; the app now never sends them (see [`publication-draft.md`](publication-draft.md)).
 - `Malformed(..)`: a 2xx answer that is not the expected JSON.
 
 The Application Password is never in a URL, a log line or an error message.

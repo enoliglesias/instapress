@@ -17,7 +17,7 @@ The `http` module holds the one blocking client (`UreqClient`, over `ureq`) that
 ## Operations
 - `get_text(url, query, bearer_token)`: `GET`, body as text.
 - `post(url, headers, body)`: `POST` of raw bytes, body as text.
-- `get_bytes(url, max_bytes)`: `GET` without credentials, reading at most `max_bytes`; returns the status, the declared `Content-Type` and the bytes (`Download`). The declared type is not used: the image type is read from the bytes (see `../domain/recipe-draft.md`).
+- `get_bytes(url, max_bytes)`: `GET` without credentials, reading at most `max_bytes`; returns the status, the declared `Content-Type` and the bytes (`Download`). The declared type is not used: the image type is read from the bytes (see `../domain/publication-draft.md`).
 
 All three are `pub(crate)`; other modules reach them through their own traits (`HttpGet`, `WpHttp`, `ImageFetcher`), which tests replace with fakes so nothing touches the network.
 

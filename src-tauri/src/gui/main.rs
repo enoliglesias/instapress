@@ -10,8 +10,8 @@
 use anyhow::{Context, Result};
 use instapress::http::UreqClient;
 use instapress::instagram_api::{self, Post, RenewalOutcome, TokenStatus};
+use instapress::publication_html::{prepare_draft_text, slugify, DraftText};
 use instapress::publish::{publish_draft, DraftInput};
-use instapress::recipe_html::{prepare_draft_text, slugify, DraftText};
 use instapress::token::{AccessToken, KeyringStore, TokenStore};
 use instapress::wordpress::{
     self, CategoryItem, CreatedPost, CredentialsStore, KeyringCredentials, WpCredentials,

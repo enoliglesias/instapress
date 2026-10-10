@@ -29,8 +29,8 @@
     "publisher": "Enol Iglesias",
     "copyright": "Copyright (c) 2026 Enol Iglesias",
     "category": "Utility",
-    "shortDescription": "Instagram recipe to WordPress post",
-    "longDescription": "Instapress loads the caption and image of one of your own Instagram posts or reels, lets you edit the text, and publishes it as a recipe post on a WordPress site.",
+    "shortDescription": "Instagram post to WordPress post",
+    "longDescription": "Instapress loads the caption and image of one of your own Instagram posts or reels, lets you edit the text, and publishes it as a post on a WordPress site.",
     "licenseFile": "../LICENSE",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.png", "icons/icon.ico"]
   }

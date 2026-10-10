@@ -4,7 +4,7 @@ Guidelines for working in this repository (`instapress`, a Rust & Tauri desktop 
 
 ## What the app does
 
-Loads the caption and image of one of the user's own Instagram posts or reels through the Instagram API (the user's access token, kept in the OS credential store), puts the caption into an editable rich text editor, lets the user choose the picture (the post's own image, a file, or none), and creates the result as a recipe post on a WordPress site through its REST API. The post is always created as a draft: the user reviews and publishes it from WordPress.
+Loads the caption and image of one of the user's own Instagram posts or reels through the Instagram API (the user's access token, kept in the OS credential store), puts the caption into an editable rich text editor, lets the user choose the picture (the post's own image, a file, or none), and creates the result as a publication post on a WordPress site through its REST API. The post is always created as a draft: the user reviews and publishes it from WordPress.
 
 Product constraints to keep in mind:
 
@@ -41,7 +41,7 @@ This repository includes specialized Claude Code agents and skills under `.claud
 
 - The user may speak Spanish in chat, but **everything written to the repository must be in English**: code, identifiers, comments, docs, commit messages, PR/issue text, error messages, log output and test names.
 - Chat replies may follow the language the user uses.
-- Exception: user-facing recipe content (the text extracted from Instagram and the posts published to WordPress) is data and keeps its original language.
+- Exception: user-facing publication content (the text extracted from Instagram and the posts published to WordPress) is data and keeps its original language.
 
 ## Strict rules: Git and remote
 
