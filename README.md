@@ -34,6 +34,10 @@ cargo run --manifest-path src-tauri/Cargo.toml
 
 The living design notes are in [`knowledge/`](knowledge/00-index.md). Contributor and agent rules are in [`CLAUDE.md`](CLAUDE.md).
 
+## Disclaimer
+
+Instapress is an independent project. It is not affiliated with, endorsed by or sponsored by Meta, Instagram or WordPress. Instagram and WordPress are trademarks of their owners.
+
 ## Author and license
 
 Enol Iglesias. Released under the [MIT License](LICENSE).
