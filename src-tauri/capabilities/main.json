@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Main window: classifies the Instagram URL the user typed.",
+  "description": "Main window: classifies Instagram URLs, manages the access token and lists recent posts.",
   "windows": ["main"],
-  "permissions": ["allow-classify-instagram-url"]
+  "permissions": [
+    "allow-classify-instagram-url",
+    "allow-has-token",
+    "allow-save-token",
+    "allow-clear-token",
+    "allow-list-posts"
+  ]
 }

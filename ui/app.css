@@ -92,3 +92,90 @@ button:focus-visible {
 #result.error {
   color: var(--error);
 }
+
+section {
+  margin-top: 32px;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+h3 {
+  margin: 16px 0 6px;
+  font-size: 15px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+button.secondary {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg);
+}
+
+.posts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button.post {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg);
+  font-weight: 400;
+  text-align: left;
+}
+
+button.post img {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 6px;
+  background: var(--line);
+  object-fit: cover;
+}
+
+button.post small {
+  display: block;
+  color: var(--muted);
+}
+
+.excerpt {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+pre {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+
+#token-message,
+#posts-message {
+  min-height: 1.5em;
+}
+
+#token-message.error,
+#posts-message.error {
+  color: var(--error);
+}

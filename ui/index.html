@@ -9,15 +9,45 @@
 <body>
   <main>
     <h1>recipe-sync</h1>
-    <p class="hint">Paste the URL of a public Instagram profile, post or reel.</p>
-    <form id="source-form" autocomplete="off">
-      <label for="url">Instagram URL</label>
-      <div class="row">
-        <input id="url" type="text" spellcheck="false" placeholder="https://www.instagram.com/reel/...">
-        <button type="submit">Check</button>
+
+    <section aria-labelledby="token-title">
+      <h2 id="token-title">Instagram access</h2>
+      <p id="token-status" class="hint"></p>
+      <form id="token-form" autocomplete="off">
+        <label for="token">Access token</label>
+        <div class="row">
+          <input id="token" type="password" spellcheck="false" placeholder="Paste the token from the Meta panel">
+          <button type="submit">Save</button>
+          <button type="button" id="token-clear" class="secondary">Remove</button>
+        </div>
+      </form>
+      <p id="token-message" role="status"></p>
+    </section>
+
+    <section aria-labelledby="posts-title">
+      <div class="head">
+        <h2 id="posts-title">Recent posts</h2>
+        <button type="button" id="posts-refresh" class="secondary">Refresh</button>
       </div>
-    </form>
-    <p id="result" role="status"></p>
+      <p id="posts-message" role="status"></p>
+      <ul id="posts" class="posts"></ul>
+      <div id="caption-panel" hidden>
+        <h3>Caption</h3>
+        <pre id="caption"></pre>
+      </div>
+    </section>
+
+    <section aria-labelledby="url-title">
+      <h2 id="url-title">Check a URL</h2>
+      <form id="source-form" autocomplete="off">
+        <label for="url">Instagram URL</label>
+        <div class="row">
+          <input id="url" type="text" spellcheck="false" placeholder="https://www.instagram.com/reel/...">
+          <button type="submit">Check</button>
+        </div>
+      </form>
+      <p id="result" role="status"></p>
+    </section>
   </main>
   <script src="app.js"></script>
 </body>
