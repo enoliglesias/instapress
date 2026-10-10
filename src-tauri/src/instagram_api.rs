@@ -4,16 +4,14 @@
 //! the network. The access token travels in the `Authorization` header, never in the URL, so it
 //! cannot end up in a logged or reported request line.
 
-use std::time::Duration;
-
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::http::{HttpResponse, UreqClient};
 use crate::token::{AccessToken, TokenError, TokenStore};
 
 const MEDIA_URL: &str = "https://graph.instagram.com/me/media";
 const MEDIA_FIELDS: &str = "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp";
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Why the recent posts could not be listed. No variant ever carries the access token.
 #[derive(Debug, Error)]
@@ -79,12 +77,21 @@ pub struct Post {
 /// Whether `url` is an HTTPS link to Instagram's image CDN, the only hosts the window's content
 /// security policy lets an `<img>` load. Anything else from the API is dropped instead of being
 /// handed to the frontend.
-fn is_trusted_image_url(url: &str) -> bool {
+pub(crate) fn is_trusted_image_url(url: &str) -> bool {
     let Some(rest) = url.strip_prefix("https://") else {
         return false;
     };
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    if authority.contains(['@', ':']) {
+    // Letters, digits, dots and hyphens only: this rejects ports, user information, backslashes,
+    // percent escapes, whitespace and control characters, which parsers read in different ways.
+    let plain_host = authority
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    // Every label must be present and may not start or end with a hyphen.
+    let labels_ok = authority
+        .split('.')
+        .all(|label| !label.is_empty() && !label.starts_with('-') && !label.ends_with('-'));
+    if !plain_host || !labels_ok {
         return false;
     }
     let host = authority.to_ascii_lowercase();
@@ -146,13 +153,6 @@ fn parse_media_page(status: u16, body: &str) -> Result<Vec<Media>, ApiError> {
     }
 }
 
-/// What the HTTP layer got back, whatever the status.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HttpResponse {
-    pub status: u16,
-    pub body: String,
-}
-
 /// The one HTTP operation the client needs: a GET with a bearer token. Implementations must not
 /// put the token in the URL or in their errors.
 pub trait HttpGet {
@@ -164,26 +164,6 @@ pub trait HttpGet {
     ) -> Result<HttpResponse, ApiError>;
 }
 
-/// [`HttpGet`] over `ureq`. 4xx and 5xx are returned, not raised, so the error body can be read.
-/// HTTPS only and no redirects: the token header must not follow one to another host.
-pub struct UreqClient {
-    agent: ureq::Agent,
-}
-
-impl Default for UreqClient {
-    fn default() -> Self {
-        let config = ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .https_only(true)
-            .max_redirects(0)
-            .timeout_global(Some(REQUEST_TIMEOUT))
-            .build();
-        Self {
-            agent: config.into(),
-        }
-    }
-}
-
 impl HttpGet for UreqClient {
     fn get(
         &self,
@@ -191,31 +171,9 @@ impl HttpGet for UreqClient {
         query: &[(&str, &str)],
         bearer_token: &str,
     ) -> Result<HttpResponse, ApiError> {
-        let mut request = self
-            .agent
-            .get(url)
-            .header("Authorization", format!("Bearer {bearer_token}"));
-        for (key, value) in query {
-            request = request.query(key, value);
-        }
-        let mut response = request.call().map_err(network_error)?;
-        let status = response.status().as_u16();
-        let body = response
-            .body_mut()
-            .read_to_string()
-            .map_err(network_error)?;
-        Ok(HttpResponse { status, body })
+        self.get_text(url, query, bearer_token)
+            .map_err(|e| ApiError::Network(e.to_string()))
     }
-}
-
-/// Keeps only the kind of failure: a `ureq` error text could carry the request details.
-fn network_error(error: ureq::Error) -> ApiError {
-    let reason = match error {
-        ureq::Error::Timeout(_) => "timed out",
-        ureq::Error::HostNotFound | ureq::Error::ConnectionFailed => "could not connect",
-        _ => "transport error",
-    };
-    ApiError::Network(reason.to_owned())
 }
 
 /// Fetches the newest `limit` posts of the account the token belongs to.
@@ -410,6 +368,17 @@ mod tests {
             "https://user@scontent.cdninstagram.com/1.jpg",
             "https://scontent.cdninstagram.com:8443/1.jpg",
             "https://evil.test/?u=https://scontent.cdninstagram.com/1.jpg",
+            "https://evil.test\\.cdninstagram.com/x",
+            "https://evil.test%2f.cdninstagram.com/x",
+            "https://evil.test%00.cdninstagram.com/x",
+            "https://evil.test .cdninstagram.com/x",
+            "https://evil.test\t.cdninstagram.com/x",
+            "https://evil.test\n.cdninstagram.com/x",
+            "https://scontent.cdninstagram.com\\@evil.test/x",
+            "https://.cdninstagram.com/x",
+            "https://cdninstagram.com/x",
+            "https://",
+            "https:///x",
             "javascript:alert(1)",
             "",
         ] {
@@ -492,21 +461,6 @@ mod tests {
             fetch_recent_media(&http, &token(), 5),
             Err(ApiError::Status(302))
         ));
-    }
-
-    #[test]
-    fn transport_errors_are_reduced_to_a_fixed_phrase() {
-        for (error, phrase) in [
-            (ureq::Error::HostNotFound, "could not connect"),
-            (ureq::Error::ConnectionFailed, "could not connect"),
-            (ureq::Error::Timeout(ureq::Timeout::Global), "timed out"),
-            (ureq::Error::TooManyRedirects, "transport error"),
-        ] {
-            match network_error(error) {
-                ApiError::Network(text) => assert_eq!(text, phrase),
-                other => panic!("expected a network error, got {other:?}"),
-            }
-        }
     }
 
     #[test]

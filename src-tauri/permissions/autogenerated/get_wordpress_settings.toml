@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-wordpress-settings"
+description = "Enables the get_wordpress_settings command without any pre-configured scope."
+commands.allow = ["get_wordpress_settings"]
+
+[[permission]]
+identifier = "deny-get-wordpress-settings"
+description = "Denies the get_wordpress_settings command without any pre-configured scope."
+commands.deny = ["get_wordpress_settings"]

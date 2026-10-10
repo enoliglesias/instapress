@@ -3,10 +3,15 @@
 
 const COMMANDS: &[&str] = &[
     "classify_instagram_url",
+    "prepare_draft",
     "has_token",
     "save_token",
     "clear_token",
     "list_posts",
+    "get_wordpress_settings",
+    "save_wordpress_settings",
+    "clear_wordpress_settings",
+    "create_wordpress_draft",
 ];
 
 fn main() {

@@ -65,14 +65,41 @@ pub trait TokenStore {
     fn clear(&self) -> Result<(), TokenError>;
 }
 
-/// [`TokenStore`] backed by the OS credential store (Windows Credential Manager, macOS
-/// Keychain, Secret Service). Not unit-tested: it needs a real OS session.
-#[derive(Debug, Default)]
-pub struct KeyringStore;
+/// One named secret in the OS credential store (Windows Credential Manager, macOS Keychain,
+/// Secret Service), under the `recipe-sync` service. Not unit-tested: it needs a real OS session.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct OsSecret(&'static str);
 
-impl KeyringStore {
-    fn entry(action: &'static str) -> Result<keyring::Entry, TokenError> {
-        keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER).map_err(|e| store_error(action, &e))
+impl OsSecret {
+    pub(crate) const fn new(user: &'static str) -> Self {
+        Self(user)
+    }
+
+    fn entry(&self, action: &'static str) -> Result<keyring::Entry, TokenError> {
+        keyring::Entry::new(KEYRING_SERVICE, self.0).map_err(|e| store_error(action, &e))
+    }
+
+    /// The stored text, or `None` when there is none.
+    pub(crate) fn load(&self, what: &'static str) -> Result<Option<String>, TokenError> {
+        match self.entry(what)?.get_password() {
+            Ok(raw) => Ok(Some(raw)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(store_error(what, &e)),
+        }
+    }
+
+    pub(crate) fn save(&self, what: &'static str, secret: &str) -> Result<(), TokenError> {
+        self.entry(what)?
+            .set_password(secret)
+            .map_err(|e| store_error(what, &e))
+    }
+
+    /// Removing a secret that is not there is not an error.
+    pub(crate) fn clear(&self, what: &'static str) -> Result<(), TokenError> {
+        match self.entry(what)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(store_error(what, &e)),
+        }
     }
 }
 
@@ -83,28 +110,27 @@ fn store_error(action: &'static str, error: &keyring::Error) -> TokenError {
     }
 }
 
+/// [`TokenStore`] backed by the OS credential store.
+#[derive(Debug, Default)]
+pub struct KeyringStore;
+
+const INSTAGRAM_SECRET: OsSecret = OsSecret::new(KEYRING_USER);
+
 impl TokenStore for KeyringStore {
     fn load(&self) -> Result<Option<AccessToken>, TokenError> {
-        match Self::entry("read the token")?.get_password() {
-            // A stored value that no longer validates counts as no token: the user is asked to
-            // paste it again and the save overwrites the bad entry.
-            Ok(raw) => Ok(AccessToken::new(&raw).ok()),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(store_error("read the token", &e)),
-        }
+        // A stored value that no longer validates counts as no token: the user is asked to
+        // paste it again and the save overwrites the bad entry.
+        Ok(INSTAGRAM_SECRET
+            .load("read the token")?
+            .and_then(|raw| AccessToken::new(&raw).ok()))
     }
 
     fn save(&self, token: &AccessToken) -> Result<(), TokenError> {
-        Self::entry("save the token")?
-            .set_password(token.expose())
-            .map_err(|e| store_error("save the token", &e))
+        INSTAGRAM_SECRET.save("save the token", token.expose())
     }
 
     fn clear(&self) -> Result<(), TokenError> {
-        match Self::entry("remove the token")?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(store_error("remove the token", &e)),
-        }
+        INSTAGRAM_SECRET.clear("remove the token")
     }
 }
 
