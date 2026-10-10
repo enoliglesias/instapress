@@ -1,6 +1,6 @@
 # Instapress
 
-Desktop app (Rust and Tauri v2) that turns one of your own Instagram recipes into a WordPress draft:
+Desktop app (Rust and Tauri v2) that turns one of your own Instagram publications into a WordPress draft:
 
 1. Connect your Instagram account with an access token and pick one of your recent posts or reels.
 2. Its caption is loaded into an editable rich text editor, with a suggested title.
