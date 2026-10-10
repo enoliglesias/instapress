@@ -18,6 +18,15 @@ pub struct DraftInput {
     /// Optional: a request without it means no video.
     #[serde(default)]
     pub video: VideoChoice,
+    /// Optional: the slug of the address. It is cleaned, and blank means WordPress makes one.
+    #[serde(default)]
+    pub slug: String,
+    /// Optional: the meta description. Blank means none.
+    #[serde(default)]
+    pub meta_description: String,
+    /// Optional: the focus keyphrase. Blank means none.
+    #[serde(default)]
+    pub focus_keyphrase: String,
 }
 
 /// Why the draft could not be created.
@@ -47,7 +56,10 @@ where
     H: WpHttp,
     F: ImageFetcher,
 {
-    let draft = RecipeDraft::new(&input.title, &input.html)?;
+    let draft = RecipeDraft::new(&input.title, &input.html)?
+        .with_slug(&input.slug)
+        .with_meta_description(&input.meta_description)?
+        .with_focus_keyphrase(&input.focus_keyphrase)?;
     let draft = draft.with_video(video::resolve(input.video)?);
     let credentials = store.load()?.ok_or(WordPressError::NoSettings)?;
     let image = resolve(input.image, fetcher)?;
@@ -116,6 +128,9 @@ mod tests {
             html: "<p>Con fabes</p><script>x</script>".into(),
             image,
             video: VideoChoice::None,
+            slug: String::new(),
+            meta_description: String::new(),
+            focus_keyphrase: String::new(),
         }
     }
 
@@ -123,6 +138,88 @@ mod tests {
         VideoChoice::InstagramEmbed {
             permalink: "https://www.instagram.com/beginveganbegun/reel/DJrCx-vsnAh/".into(),
         }
+    }
+
+    #[test]
+    fn the_slug_and_the_meta_description_reach_wordpress_cleaned() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":5}"#)]);
+        let mut seo = input(ImageChoice::None);
+        seo.slug = "Fabada 💚 Vegana ñam".into();
+        seo.meta_description = "  Fabada  💚\n vegana ".into();
+        let post = publish_draft(&saved(), &site, &fetcher(200), seo).unwrap();
+        // The fake site did not echo the meta back, so it counts as not kept.
+        assert_eq!(post.meta_description_saved, Some(false));
+
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert_eq!(body["slug"], "fabada-vegana-nam");
+        assert_eq!(body["meta"]["_yoast_wpseo_metadesc"], "Fabada vegana");
+        assert!(String::from_utf8_lossy(&sent[0].2)
+            .chars()
+            .all(|c| c.len_utf8() < 4));
+    }
+
+    #[test]
+    fn the_focus_keyphrase_reaches_wordpress_cleaned() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":5}"#)]);
+        let mut seo = input(ImageChoice::None);
+        seo.focus_keyphrase = "  fabada \n vegana 💚 ".into();
+        let post = publish_draft(&saved(), &site, &fetcher(200), seo).unwrap();
+        assert_eq!(post.focus_keyphrase_saved, Some(false));
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert_eq!(body["meta"]["_yoast_wpseo_focuskw"], "fabada vegana");
+    }
+
+    #[test]
+    fn a_focus_keyphrase_that_is_too_long_stops_everything_before_any_work() {
+        let site = FakeSite::new(vec![]);
+        let mut bad = input(ImageChoice::None);
+        bad.focus_keyphrase = "a".repeat(101);
+        assert_eq!(
+            publish_draft(&saved(), &site, &fetcher(200), bad),
+            Err(PublishError::Draft(DraftError::FocusKeyphraseTooLong {
+                length: 101,
+                max: 100
+            }))
+        );
+        assert!(site.sent.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_meta_description_that_is_too_long_stops_everything_before_any_work() {
+        let site = FakeSite::new(vec![]);
+        let fetcher = fetcher(200);
+        let mut bad = input(ImageChoice::PostImage {
+            url: "https://scontent.cdninstagram.com/v/1.jpg".into(),
+        });
+        bad.meta_description = "a".repeat(301);
+        assert_eq!(
+            publish_draft(&saved(), &site, &fetcher, bad),
+            Err(PublishError::Draft(DraftError::MetaDescriptionTooLong {
+                length: 301,
+                max: 300
+            }))
+        );
+        assert_eq!(*fetcher.asked.borrow(), 0);
+        assert!(site.sent.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_request_without_slug_or_description_is_understood() {
+        let input: DraftInput =
+            serde_json::from_str(r#"{"title":"T","html":"<p>x</p>","image":{"kind":"none"}}"#)
+                .unwrap();
+        assert_eq!(input.slug, "");
+        assert_eq!(input.meta_description, "");
+        assert_eq!(input.focus_keyphrase, "");
+        let with: DraftInput = serde_json::from_str(
+            r#"{"title":"T","html":"<p>x</p>","image":{"kind":"none"},
+                "slug":"mi-slug","meta_description":"Una descripción"}"#,
+        )
+        .unwrap();
+        assert_eq!(with.slug, "mi-slug");
+        assert_eq!(with.meta_description, "Una descripción");
     }
 
     #[test]

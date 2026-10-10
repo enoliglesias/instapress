@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::image::Image;
@@ -12,6 +13,12 @@ use crate::video::VideoEmbed;
 
 const TITLE_SUGGESTION_CHARS: usize = 80;
 const MAX_TITLE_CHARS: usize = 200;
+const MAX_SLUG_CHARS: usize = 100;
+/// Search engines show about this much of a meta description.
+const META_DESCRIPTION_SUGGESTION_CHARS: usize = 155;
+const MAX_META_DESCRIPTION_CHARS: usize = 300;
+/// A focus keyphrase is a few words; this leaves room for a long one.
+const MAX_FOCUS_KEYPHRASE_CHARS: usize = 100;
 
 const ALLOWED_TAGS: [&str; 14] = [
     "p",
@@ -39,32 +46,140 @@ pub enum DraftError {
     TitleTooLong { length: usize, max: usize },
     #[error("the text of the post is empty")]
     EmptyBody,
+    #[error("the meta description has {length} characters; the limit is {max}")]
+    MetaDescriptionTooLong { length: usize, max: usize },
+    #[error("the focus keyphrase has {length} characters; the limit is {max}")]
+    FocusKeyphraseTooLong { length: usize, max: usize },
 }
 
-/// Turns a plain-text caption into HTML: a blank line starts a paragraph, a single newline is a
-/// line break, and everything special in HTML is escaped.
-pub fn caption_to_html(caption: &str) -> String {
-    let normalized = caption.replace("\r\n", "\n").replace('\r', "\n");
-    let mut paragraphs: Vec<Vec<&str>> = Vec::new();
+/// The titles of the sections of a recipe, as they are written once accents and case are folded
+/// away. Where one starts with another the longer one comes first.
+const SECTION_HEADINGS: [&str; 15] = [
+    "lista de ingredientes",
+    "ingredientes necesarios",
+    "los ingredientes",
+    "ingredientes",
+    "modo de preparacion",
+    "modo de elaboracion",
+    "preparacion",
+    "elaboracion",
+    "paso a paso",
+    "pasos a seguir",
+    "pasos",
+    "como se hace",
+    "como hacerlo",
+    "instrucciones",
+    "procedimiento",
+];
+/// A heading may carry a short qualifier ("para 4 personas"); a longer one is a sentence.
+const MAX_QUALIFIER_WORDS: usize = 6;
+
+/// Lower-case text without the accents of Spanish, so `Elaboración` and `ELABORACION` compare
+/// equal.
+fn fold(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .map(|c| match c {
+            'á' => 'a',
+            'é' => 'e',
+            'í' => 'i',
+            'ó' => 'o',
+            'ú' | 'ü' => 'u',
+            other => other,
+        })
+        .collect()
+}
+
+/// Whether what follows the title of a section is only a short qualifier: nothing, `para 4
+/// personas` or `(4 personas)`. Anything else, such as `: 200 g de harina`, means the line also
+/// carries the content of the section.
+fn is_heading_qualifier(rest: &str) -> bool {
+    if rest.is_empty() {
+        return true;
+    }
+    // The title has to end there: `ingredientesx` is not `ingredientes`.
+    let Some(qualifier) = rest
+        .strip_prefix(' ')
+        .or_else(|| rest.starts_with('(').then_some(rest))
+    else {
+        return false;
+    };
+    let short = |words: &str| {
+        !words.contains([':', ',']) && words.split_whitespace().count() <= MAX_QUALIFIER_WORDS
+    };
+    match qualifier.strip_prefix('(') {
+        Some(inner) => inner.strip_suffix(')').is_some_and(short),
+        None => qualifier.strip_prefix("para ").is_some_and(short),
+    }
+}
+
+/// The text of `line` when it only names a section of the recipe, such as `Ingredientes`,
+/// `🥕 INGREDIENTES para 3 personas:` or `Elaboración`; `None` for any other line.
+///
+/// Emoji, punctuation and other decoration around the title are dropped. A line that goes on
+/// with the content (`Ingredientes: 200 g de harina`) and a hashtag are not headings.
+fn section_heading(line: &str) -> Option<String> {
+    let line = line.trim();
+    if line.starts_with('#') {
+        return None;
+    }
+    let text = line.trim_matches(|c: char| !c.is_alphanumeric() && c != '(' && c != ')');
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let folded = fold(&text);
+    SECTION_HEADINGS
+        .iter()
+        .any(|keyword| {
+            folded
+                .strip_prefix(keyword)
+                .is_some_and(is_heading_qualifier)
+        })
+        .then_some(text)
+}
+
+/// A block of the editor: a paragraph made of lines, or the title of a section.
+enum Block<'a> {
+    Paragraph(Vec<&'a str>),
+    Heading(String),
+}
+
+fn close_paragraph<'a>(blocks: &mut Vec<Block<'a>>, lines: &mut Vec<&'a str>) {
+    if !lines.is_empty() {
+        blocks.push(Block::Paragraph(std::mem::take(lines)));
+    }
+}
+
+/// Splits text with `\n` line endings into paragraphs and section headings.
+fn parse_blocks(text: &str) -> Vec<Block<'_>> {
+    let mut blocks: Vec<Block> = Vec::new();
     let mut current: Vec<&str> = Vec::new();
-    for line in normalized.lines() {
+    for line in text.lines() {
         let line = line.trim();
         if line.is_empty() {
-            if !current.is_empty() {
-                paragraphs.push(std::mem::take(&mut current));
-            }
+            close_paragraph(&mut blocks, &mut current);
+        } else if let Some(heading) = section_heading(line) {
+            close_paragraph(&mut blocks, &mut current);
+            blocks.push(Block::Heading(heading));
         } else {
             current.push(line);
         }
     }
-    if !current.is_empty() {
-        paragraphs.push(current);
-    }
-    paragraphs
+    close_paragraph(&mut blocks, &mut current);
+    blocks
+}
+
+/// Turns a plain-text caption into HTML: a blank line starts a paragraph, a single newline is a
+/// line break, a line that names a section of the recipe (`Ingredientes`, `Elaboración`...)
+/// becomes an `<h2>`, and everything special in HTML is escaped.
+pub fn caption_to_html(caption: &str) -> String {
+    let normalized = caption.replace("\r\n", "\n").replace('\r', "\n");
+    parse_blocks(&normalized)
         .iter()
-        .map(|lines| {
-            let body: Vec<String> = lines.iter().map(|line| escape_html(line)).collect();
-            format!("<p>{}</p>", body.join("<br>"))
+        .map(|block| match block {
+            Block::Paragraph(lines) => {
+                let body: Vec<String> = lines.iter().map(|line| escape_html(line)).collect();
+                format!("<p>{}</p>", body.join("<br>"))
+            }
+            Block::Heading(text) => format!("<h2>{}</h2>", escape_html(text)),
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -99,6 +214,177 @@ pub fn suggest_title(caption: &str) -> String {
                 .to_owned()
         })
         .unwrap_or_default()
+}
+
+/// Turns a title into the slug of its address: lower-case ASCII letters and digits separated by
+/// single hyphens. Accents are folded (`Cañas` becomes `canas`); emoji, symbols, punctuation and
+/// letters of other alphabets are separators, so none of them reaches the address. The result is
+/// cut at 100 characters and is empty when nothing usable is left.
+pub fn slugify(text: &str) -> String {
+    let mut slug = String::new();
+    let mut pending_hyphen = false;
+    for c in text.chars() {
+        let folded = fold_letter(c);
+        if folded.is_empty() {
+            pending_hyphen = !slug.is_empty();
+            continue;
+        }
+        if pending_hyphen {
+            slug.push('-');
+            pending_hyphen = false;
+        }
+        slug.push_str(folded);
+    }
+    slug.truncate(MAX_SLUG_CHARS);
+    slug.trim_end_matches('-').to_owned()
+}
+
+/// The ASCII a character becomes in a slug, or `""` when it is a separator.
+fn fold_letter(c: char) -> &'static str {
+    // Digits and ASCII letters stand for themselves; build their `&'static str` from a table.
+    const ASCII: &str = "0123456789abcdefghijklmnopqrstuvwxyz";
+    let lower = c.to_ascii_lowercase();
+    if let Some(index) = ASCII.find(lower) {
+        return &ASCII[index..=index];
+    }
+    match c.to_lowercase().next().unwrap_or(c) {
+        'á' | 'à' | 'â' | 'ä' | 'ã' | 'å' => "a",
+        'é' | 'è' | 'ê' | 'ë' => "e",
+        'í' | 'ì' | 'î' | 'ï' => "i",
+        'ó' | 'ò' | 'ô' | 'ö' | 'õ' => "o",
+        'ú' | 'ù' | 'û' | 'ü' => "u",
+        'ñ' => "n",
+        'ç' => "c",
+        'ß' => "ss",
+        'æ' => "ae",
+        'œ' => "oe",
+        _ => "",
+    }
+}
+
+/// One line of plain text with no four-byte character (emoji). The SEO fields are stored as they
+/// are, so a database on the 3-byte `utf8` charset would refuse such a character, and an entity
+/// cannot stand in for it because the text is escaped when the page is built.
+fn one_line_without_emoji(text: &str) -> String {
+    text.chars()
+        .filter(|&c| !is_four_byte(c))
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Cleans a meta description: one line of text without emoji, at most 300 characters.
+fn clean_meta_description(text: &str) -> Result<String, DraftError> {
+    let cleaned = one_line_without_emoji(text);
+    let length = cleaned.chars().count();
+    if length > MAX_META_DESCRIPTION_CHARS {
+        return Err(DraftError::MetaDescriptionTooLong {
+            length,
+            max: MAX_META_DESCRIPTION_CHARS,
+        });
+    }
+    Ok(cleaned)
+}
+
+/// Cleans a focus keyphrase: one line of text without emoji, at most 100 characters.
+fn clean_focus_keyphrase(text: &str) -> Result<String, DraftError> {
+    let cleaned = one_line_without_emoji(text);
+    let length = cleaned.chars().count();
+    if length > MAX_FOCUS_KEYPHRASE_CHARS {
+        return Err(DraftError::FocusKeyphraseTooLong {
+            length,
+            max: MAX_FOCUS_KEYPHRASE_CHARS,
+        });
+    }
+    Ok(cleaned)
+}
+
+/// A suggestion for the meta description: the first paragraph of the body that is text and not a
+/// run of hashtags, cut at 155 characters on a word boundary and marked with an ellipsis when it
+/// was cut. Empty when there is none.
+fn suggest_meta_description(body: &str) -> String {
+    let paragraph = parse_blocks(body)
+        .into_iter()
+        .find_map(|block| match block {
+            Block::Paragraph(lines) => {
+                let text = lines.join(" ");
+                let only_hashtags = text.split_whitespace().all(|word| word.starts_with('#'));
+                (!only_hashtags).then_some(text)
+            }
+            Block::Heading(_) => None,
+        });
+    let Some(text) = paragraph else {
+        return String::new();
+    };
+    let text = text
+        .chars()
+        .filter(|&c| !is_four_byte(c))
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if text.chars().count() <= META_DESCRIPTION_SUGGESTION_CHARS {
+        return text;
+    }
+    let cut: String = text
+        .chars()
+        .take(META_DESCRIPTION_SUGGESTION_CHARS)
+        .collect();
+    // Back up to the last whole word, unless the text is one long word.
+    let cut = match cut.rfind(' ') {
+        Some(index) if index > 0 => &cut[..index],
+        _ => &cut,
+    };
+    format!("{}…", cut.trim_end_matches(|c: char| !c.is_alphanumeric()))
+}
+
+/// The editable starting point of a draft.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DraftText {
+    pub title: String,
+    pub html: String,
+    /// The address slug made from the title.
+    pub slug: String,
+    /// A suggestion for the meta description, taken from the start of the text.
+    pub meta_description: String,
+}
+
+/// Splits a caption into the suggested title and the body of the editor. The line that gives
+/// the title leaves the body, so it is not said twice. Two cases keep it there: a line too long
+/// to fit the title, because the title is only the start of it, and a caption that has no other
+/// text, because the body would be empty.
+pub fn prepare_draft_text(caption: &str) -> DraftText {
+    let normalized = caption.replace("\r\n", "\n").replace('\r', "\n");
+    let lines: Vec<&str> = normalized.lines().collect();
+    let Some(title_line) = lines.iter().position(|line| !line.trim().is_empty()) else {
+        return DraftText {
+            title: String::new(),
+            html: String::new(),
+            slug: String::new(),
+            meta_description: String::new(),
+        };
+    };
+    let fits = lines[title_line].trim().chars().count() <= TITLE_SUGGESTION_CHARS;
+    let rest = lines
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != title_line)
+        .map(|(_, line)| *line)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let body = if fits && !rest.trim().is_empty() {
+        &rest
+    } else {
+        &normalized
+    };
+    let title = suggest_title(&normalized);
+    DraftText {
+        slug: slugify(&title),
+        html: caption_to_html(body),
+        meta_description: suggest_meta_description(body),
+        title,
+    }
 }
 
 /// Cleans editor HTML with an allow-list: paragraphs, line breaks, emphasis, two heading
@@ -149,14 +435,18 @@ fn has_visible_text(html: &str) -> bool {
         .is_empty()
 }
 
-/// A validated draft, ready to send: a plain-text title, sanitized HTML, an optional image and an
-/// optional Instagram player to show below the text.
+/// A validated draft, ready to send: a plain-text title, sanitized HTML, an optional image, an
+/// optional Instagram player to show below the text, and the optional slug, meta description and
+/// focus keyphrase.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecipeDraft {
     title: String,
     html: String,
     image: Option<Image>,
     video: Option<VideoEmbed>,
+    slug: Option<String>,
+    meta_description: Option<String>,
+    focus_keyphrase: Option<String>,
 }
 
 impl RecipeDraft {
@@ -192,7 +482,24 @@ impl RecipeDraft {
             html: encode_four_byte_chars(&html),
             image: None,
             video: None,
+            slug: None,
+            meta_description: None,
+            focus_keyphrase: None,
         })
+    }
+
+    /// Sets the slug of the address. Whatever is given is cleaned with [`slugify`], so emoji,
+    /// accents and symbols never reach the address; when nothing usable is left there is no slug
+    /// and WordPress makes its own from the title.
+    pub fn with_slug(mut self, slug: &str) -> Self {
+        self.slug = Some(slugify(slug)).filter(|slug| !slug.is_empty());
+        self
+    }
+
+    /// Sets the meta description, one line without emoji. A blank one means there is none.
+    pub fn with_meta_description(mut self, text: &str) -> Result<Self, DraftError> {
+        self.meta_description = Some(clean_meta_description(text)?).filter(|text| !text.is_empty());
+        Ok(self)
     }
 
     /// Attaches the featured image, or removes it with `None`.
@@ -231,6 +538,24 @@ impl RecipeDraft {
         self.video.as_ref()
     }
 
+    /// Sets the focus keyphrase, one line without emoji. A blank one means there is none.
+    pub fn with_focus_keyphrase(mut self, text: &str) -> Result<Self, DraftError> {
+        self.focus_keyphrase = Some(clean_focus_keyphrase(text)?).filter(|text| !text.is_empty());
+        Ok(self)
+    }
+
+    pub fn slug(&self) -> Option<&str> {
+        self.slug.as_deref()
+    }
+
+    pub fn meta_description(&self) -> Option<&str> {
+        self.meta_description.as_deref()
+    }
+
+    pub fn focus_keyphrase(&self) -> Option<&str> {
+        self.focus_keyphrase.as_deref()
+    }
+
     pub fn image(&self) -> Option<&Image> {
         self.image.as_ref()
     }
@@ -262,6 +587,338 @@ mod tests {
         assert_eq!(
             caption_to_html("a\r\nb\r\n\r\nc\rd"),
             "<p>a<br>b</p>\n<p>c<br>d</p>"
+        );
+    }
+
+    #[test]
+    fn lines_that_name_a_section_become_headings() {
+        let html = caption_to_html(
+            "Pan de molde\nIngredientes\n200 g de harina\n2 huevos\n\nElaboración\nMezcla todo",
+        );
+        assert_eq!(
+            html,
+            "<p>Pan de molde</p>\n<h2>Ingredientes</h2>\n<p>200 g de harina<br>2 huevos</p>\n\
+             <h2>Elaboración</h2>\n<p>Mezcla todo</p>"
+        );
+    }
+
+    #[test]
+    fn a_heading_in_the_middle_of_a_paragraph_splits_it() {
+        assert_eq!(
+            caption_to_html("Texto\nIngredientes:\n- a\n- b\nPreparación:\n1. mezcla"),
+            "<p>Texto</p>\n<h2>Ingredientes</h2>\n<p>- a<br>- b</p>\n<h2>Preparación</h2>\n\
+             <p>1. mezcla</p>"
+        );
+    }
+
+    #[test]
+    fn the_names_of_the_sections_are_found_however_they_are_written() {
+        for (line, heading) in [
+            ("Ingredientes", "Ingredientes"),
+            ("INGREDIENTES", "INGREDIENTES"),
+            ("ingredientes:", "ingredientes"),
+            ("🥕 INGREDIENTES 🥕", "INGREDIENTES"),
+            ("✨ Ingredientes ✨", "Ingredientes"),
+            ("*Ingredientes*", "Ingredientes"),
+            ("- Ingredientes -", "Ingredientes"),
+            ("Lista de ingredientes", "Lista de ingredientes"),
+            ("Los ingredientes", "Los ingredientes"),
+            ("Ingredientes necesarios:", "Ingredientes necesarios"),
+            (
+                "Ingredientes para 3 personas",
+                "Ingredientes para 3 personas",
+            ),
+            ("Ingredientes para la masa:", "Ingredientes para la masa"),
+            (
+                "Ingredientes (para 4 raciones):",
+                "Ingredientes (para 4 raciones)",
+            ),
+            ("Ingredientes (3 personas)", "Ingredientes (3 personas)"),
+            ("Elaboración", "Elaboración"),
+            ("ELABORACIÓN:", "ELABORACIÓN"),
+            ("elaboracion", "elaboracion"),
+            ("👩‍🍳 Preparación:", "Preparación"),
+            ("Preparacion", "Preparacion"),
+            ("Modo de preparación", "Modo de preparación"),
+            ("Modo de elaboración:", "Modo de elaboración"),
+            ("Paso a paso", "Paso a paso"),
+            ("Pasos a seguir", "Pasos a seguir"),
+            ("Pasos:", "Pasos"),
+            ("Instrucciones", "Instrucciones"),
+            ("Procedimiento", "Procedimiento"),
+            ("Cómo se hace", "Cómo se hace"),
+            (
+                "  Ingredientes   para   3   personas ",
+                "Ingredientes para 3 personas",
+            ),
+        ] {
+            assert_eq!(section_heading(line).as_deref(), Some(heading), "{line:?}");
+        }
+    }
+
+    #[test]
+    fn a_line_that_goes_on_with_content_is_not_a_heading() {
+        for line in [
+            "Ingredientes: 200 g de harina",
+            "Ingredientes: harina, agua y sal",
+            "Preparación: mezcla todo y hornea",
+            "Ingredientes (200 g de harina, 2 huevos, 100 ml de leche)",
+            "Ingredientes para 4 personas, 2 huevos",
+            "Los ingredientes son muy fáciles de encontrar",
+            "Preparación para hacer pan en casa de forma fácil y rápida",
+            "Ingredientes y preparación en el vídeo",
+            "Ingredientesx",
+            "Pasos de baile",
+            "Mi preparación favorita",
+            "#ingredientes",
+            "#Preparación",
+            "Tarta de queso",
+            "",
+            "💚",
+        ] {
+            assert_eq!(section_heading(line), None, "{line:?}");
+        }
+    }
+
+    #[test]
+    fn a_heading_is_escaped() {
+        // The qualifier cannot hold markup: it would be longer than a heading may be, or
+        // it is escaped like any text.
+        assert_eq!(
+            caption_to_html("Ingredientes (para <b>2</b>)"),
+            "<h2>Ingredientes (para &lt;b&gt;2&lt;/b&gt;)</h2>"
+        );
+    }
+
+    #[test]
+    fn the_title_line_leaves_the_body() {
+        let text = prepare_draft_text(
+            "Tarta de queso\n\nIngredientes\n200 g de queso\n\nElaboración\nMezcla",
+        );
+        assert_eq!(text.title, "Tarta de queso");
+        assert_eq!(
+            text.html,
+            "<h2>Ingredientes</h2>\n<p>200 g de queso</p>\n<h2>Elaboración</h2>\n<p>Mezcla</p>"
+        );
+    }
+
+    #[test]
+    fn the_title_line_leaves_the_body_even_without_a_blank_line() {
+        let text = prepare_draft_text("\n  \nTítulo 💚\nLínea dos\nLínea tres");
+        assert_eq!(text.title, "Título 💚");
+        assert_eq!(text.html, "<p>Línea dos<br>Línea tres</p>");
+    }
+
+    #[test]
+    fn a_title_line_too_long_to_fit_stays_in_the_body() {
+        let long = "a".repeat(100);
+        let text = prepare_draft_text(&format!("{long}\n\nResto"));
+        assert_eq!(text.title, "a".repeat(80));
+        assert_eq!(text.html, format!("<p>{long}</p>\n<p>Resto</p>"));
+    }
+
+    #[test]
+    fn a_caption_that_is_only_the_title_keeps_it_in_the_body() {
+        let text = prepare_draft_text("Solo una línea");
+        assert_eq!(text.title, "Solo una línea");
+        assert_eq!(text.html, "<p>Solo una línea</p>");
+    }
+
+    #[test]
+    fn an_empty_caption_gives_an_empty_start() {
+        for caption in ["", "   \n \r\n\t"] {
+            assert_eq!(
+                prepare_draft_text(caption),
+                DraftText {
+                    title: String::new(),
+                    html: String::new(),
+                    slug: String::new(),
+                    meta_description: String::new()
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn a_slug_has_only_ascii_letters_digits_and_single_hyphens() {
+        for (title, slug) in [
+            ("Tarta de queso", "tarta-de-queso"),
+            ("  Tarta   de  queso  ", "tarta-de-queso"),
+            ("Aida Lídice 💚🌱 Recetas", "aida-lidice-recetas"),
+            ("Cañas y pingüinos", "canas-y-pinguinos"),
+            ("Crème brûlée à la façon", "creme-brulee-a-la-facon"),
+            ("ÁÉÍÓÚ Ñ Ü", "aeiou-n-u"),
+            ("Straße", "strasse"),
+            ("Fabada vegana: ¡receta!", "fabada-vegana-receta"),
+            ("100% vegano & fácil", "100-vegano-facil"),
+            ("✨ Magia ✨", "magia"),
+            ("a---b___c", "a-b-c"),
+            ("COCIDO", "cocido"),
+            ("Tarta 2024", "tarta-2024"),
+        ] {
+            assert_eq!(slugify(title), slug, "{title:?}");
+        }
+    }
+
+    #[test]
+    fn a_slug_that_has_nothing_usable_is_empty() {
+        for title in ["", "   ", "💚🌱", "日本語", "---", "¡¿!?"] {
+            assert_eq!(slugify(title), "", "{title:?}");
+        }
+    }
+
+    #[test]
+    fn a_long_slug_is_cut_without_a_trailing_hyphen() {
+        let slug = slugify(&format!("{} {}", "a".repeat(99), "b".repeat(50)));
+        assert!(slug.len() <= 100);
+        assert!(!slug.ends_with('-'));
+        let slug = slugify(&"palabra ".repeat(30));
+        assert!(slug.len() <= 100 && !slug.ends_with('-'), "{slug}");
+    }
+
+    #[test]
+    fn a_slug_is_idempotent_and_has_no_forbidden_character() {
+        for title in ["Aida 💚 Lídice", "ÁÉÍ ñ ç", "a--b", "100% ¡vegano!", "x"] {
+            let once = slugify(title);
+            assert_eq!(slugify(&once), once);
+            assert!(once
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'));
+            assert!(!once.starts_with('-') && !once.ends_with('-') && !once.contains("--"));
+        }
+    }
+
+    #[test]
+    fn the_start_of_a_draft_has_a_slug_from_its_title() {
+        let text = prepare_draft_text("Tarta de queso 💚\n\nIngredientes\n200 g de queso");
+        assert_eq!(text.title, "Tarta de queso 💚");
+        assert_eq!(text.slug, "tarta-de-queso");
+    }
+
+    #[test]
+    fn the_meta_description_suggestion_is_the_first_paragraph_of_text() {
+        let text = prepare_draft_text(
+            "Tarta\n\nUna tarta cremosa y fácil 💚\ncon solo tres ingredientes.\n\nIngredientes\n200 g",
+        );
+        assert_eq!(
+            text.meta_description,
+            "Una tarta cremosa y fácil con solo tres ingredientes."
+        );
+    }
+
+    #[test]
+    fn the_meta_description_suggestion_skips_headings_and_hashtags() {
+        let text = prepare_draft_text("Tarta\n\n#vegano #tarta\n\nIngredientes\n\nMezcla bien.");
+        assert_eq!(text.meta_description, "Mezcla bien.");
+        let text = prepare_draft_text("Tarta\n\n#vegano #tarta");
+        assert_eq!(text.meta_description, "");
+        // The caption of a single line keeps it in the body, so the suggestion is that line.
+        let text = prepare_draft_text("Solo una línea");
+        assert_eq!(text.meta_description, "Solo una línea");
+    }
+
+    #[test]
+    fn a_long_meta_description_suggestion_is_cut_on_a_word() {
+        let words = "palabra ".repeat(40);
+        let text = prepare_draft_text(&format!("Titulo\n\n{words}"));
+        assert!(text.meta_description.ends_with('…'));
+        let without = text.meta_description.trim_end_matches('…');
+        assert!(without.chars().count() <= 155, "{}", text.meta_description);
+        assert!(without.ends_with("palabra"), "{}", text.meta_description);
+    }
+
+    #[test]
+    fn the_meta_description_suggestion_has_no_four_byte_character() {
+        let text = prepare_draft_text("Titulo\n\nHola 💚 mundo 🌱");
+        assert_eq!(text.meta_description, "Hola mundo");
+    }
+
+    #[test]
+    fn a_draft_cleans_the_slug_it_is_given() {
+        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>")
+            .unwrap()
+            .with_slug("Aida 💚 Lídice");
+        assert_eq!(draft.slug(), Some("aida-lidice"));
+        let draft = draft.with_slug("💚");
+        assert_eq!(draft.slug(), None);
+        let draft = draft.with_slug("");
+        assert_eq!(draft.slug(), None);
+    }
+
+    #[test]
+    fn a_draft_cleans_the_meta_description_it_is_given() {
+        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>")
+            .unwrap()
+            .with_meta_description("  Una  tarta\n 💚 cremosa  ")
+            .unwrap();
+        assert_eq!(draft.meta_description(), Some("Una tarta cremosa"));
+        let draft = draft.with_meta_description("  \n ").unwrap();
+        assert_eq!(draft.meta_description(), None);
+    }
+
+    #[test]
+    fn a_meta_description_that_is_too_long_is_rejected() {
+        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        assert!(draft
+            .clone()
+            .with_meta_description(&"a".repeat(300))
+            .is_ok());
+        assert_eq!(
+            draft.with_meta_description(&"a".repeat(301)),
+            Err(DraftError::MetaDescriptionTooLong {
+                length: 301,
+                max: 300
+            })
+        );
+    }
+
+    #[test]
+    fn a_draft_cleans_the_focus_keyphrase_it_is_given() {
+        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>")
+            .unwrap()
+            .with_focus_keyphrase("  tarta  de\n queso 💚 vegana ")
+            .unwrap();
+        assert_eq!(draft.focus_keyphrase(), Some("tarta de queso vegana"));
+        let draft = draft.with_focus_keyphrase(" \n ").unwrap();
+        assert_eq!(draft.focus_keyphrase(), None);
+    }
+
+    #[test]
+    fn a_focus_keyphrase_that_is_too_long_is_rejected() {
+        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        assert!(draft.clone().with_focus_keyphrase(&"a".repeat(100)).is_ok());
+        assert_eq!(
+            draft.with_focus_keyphrase(&"a".repeat(101)),
+            Err(DraftError::FocusKeyphraseTooLong {
+                length: 101,
+                max: 100
+            })
+        );
+    }
+
+    #[test]
+    fn a_draft_without_slug_or_description_has_none() {
+        let draft = RecipeDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        assert_eq!(draft.slug(), None);
+        assert_eq!(draft.meta_description(), None);
+        assert_eq!(draft.focus_keyphrase(), None);
+    }
+
+    #[test]
+    fn windows_line_endings_work_for_the_title_too() {
+        let text = prepare_draft_text("Titulo\r\nIngredientes\r\n200 g");
+        assert_eq!(text.title, "Titulo");
+        assert_eq!(text.html, "<h2>Ingredientes</h2>\n<p>200 g</p>");
+    }
+
+    #[test]
+    fn a_draft_built_from_the_start_keeps_the_headings() {
+        let text = prepare_draft_text("Pan\nIngredientes\n200 g\nElaboración\nMezcla");
+        let draft = RecipeDraft::new(&text.title, &text.html).unwrap();
+        assert_eq!(draft.title(), "Pan");
+        assert_eq!(
+            draft.html(),
+            "<h2>Ingredientes</h2>\n<p>200 g</p>\n<h2>Elaboración</h2>\n<p>Mezcla</p>"
         );
     }
 

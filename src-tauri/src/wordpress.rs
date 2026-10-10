@@ -15,6 +15,11 @@ use crate::recipe_html::RecipeDraft;
 use crate::token::{OsSecret, TokenError};
 
 const WORDPRESS_SECRET: OsSecret = OsSecret::new("wordpress");
+/// The post meta where Yoast SEO keeps the meta description. WordPress ignores it over the REST
+/// API unless the site registers it with `show_in_rest` (see `knowledge/operational`).
+const META_DESCRIPTION_KEY: &str = "_yoast_wpseo_metadesc";
+/// The post meta where Yoast SEO keeps the focus keyphrase; it needs the same registration.
+const FOCUS_KEYPHRASE_KEY: &str = "_yoast_wpseo_focuskw";
 
 /// Why the settings were rejected.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -288,6 +293,11 @@ pub struct CreatedPost {
     pub link: Option<String>,
     /// Where the user opens the draft in the WordPress editor.
     pub edit_url: String,
+    /// `None` when no meta description was sent. Otherwise whether WordPress kept it: `false`
+    /// means the site does not expose the field to the REST API and ignored it.
+    pub meta_description_saved: Option<bool>,
+    /// The same for the focus keyphrase.
+    pub focus_keyphrase_saved: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -300,6 +310,8 @@ struct WpErrorBody {
 struct WpCreated {
     id: u64,
     link: Option<String>,
+    /// The registered meta of the post. WordPress sends `[]` when it has none.
+    meta: Option<serde_json::Value>,
 }
 
 /// Returns the body of a 2xx answer and turns anything else into the right error.
@@ -358,6 +370,19 @@ pub fn create_draft<H: WpHttp>(
     if let Some(id) = featured_media {
         body["featured_media"] = id.into();
     }
+    if let Some(slug) = draft.slug() {
+        body["slug"] = slug.into();
+    }
+    let mut meta = serde_json::Map::new();
+    if let Some(description) = draft.meta_description() {
+        meta.insert(META_DESCRIPTION_KEY.into(), description.into());
+    }
+    if let Some(keyphrase) = draft.focus_keyphrase() {
+        meta.insert(FOCUS_KEYPHRASE_KEY.into(), keyphrase.into());
+    }
+    if !meta.is_empty() {
+        body["meta"] = meta.into();
+    }
     let response = http.post(
         &format!("{site}/wp-json/wp/v2/posts"),
         &[
@@ -367,10 +392,25 @@ pub fn create_draft<H: WpHttp>(
         body.to_string().as_bytes(),
     )?;
     let post = created(response)?;
+    // Whether the answer holds what was sent under `key`. A meta key the site has not registered
+    // for the REST API is ignored without any error and is missing from the answer.
+    let kept = |key: &str, sent: Option<&str>| {
+        sent.map(|sent| {
+            post.meta
+                .as_ref()
+                .and_then(|meta| meta.get(key))
+                .and_then(|saved| saved.as_str())
+                == Some(sent)
+        })
+    };
+    let meta_description_saved = kept(META_DESCRIPTION_KEY, draft.meta_description());
+    let focus_keyphrase_saved = kept(FOCUS_KEYPHRASE_KEY, draft.focus_keyphrase());
     Ok(CreatedPost {
         edit_url: format!("{site}/wp-admin/post.php?post={}&action=edit", post.id),
         id: post.id,
         link: post.link,
+        meta_description_saved,
+        focus_keyphrase_saved,
     })
 }
 
@@ -568,7 +608,9 @@ pub(crate) mod tests {
             CreatedPost {
                 id: 77,
                 link: Some("https://recetas.test/?p=77".into()),
-                edit_url: "https://recetas.test/wp-admin/post.php?post=77&action=edit".into()
+                edit_url: "https://recetas.test/wp-admin/post.php?post=77&action=edit".into(),
+                meta_description_saved: None,
+                focus_keyphrase_saved: None
             }
         );
 
@@ -585,6 +627,115 @@ pub(crate) mod tests {
                 "status": "draft"
             })
         );
+    }
+
+    fn seo_draft() -> RecipeDraft {
+        draft()
+            .with_slug("Fabada vegana 💚")
+            .with_meta_description("Una fabada vegana cremosa y fácil.")
+            .unwrap()
+    }
+
+    #[test]
+    fn the_slug_and_the_meta_description_go_in_the_post() {
+        let site = FakeSite::new(vec![answer(
+            201,
+            r#"{"id":77,"meta":{"_yoast_wpseo_metadesc":"Una fabada vegana cremosa y fácil."}}"#,
+        )]);
+        let post = create_draft(&site, &credentials(), &seo_draft()).unwrap();
+        assert_eq!(post.meta_description_saved, Some(true));
+
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert_eq!(body["slug"], "fabada-vegana");
+        assert_eq!(
+            body["meta"],
+            serde_json::json!({"_yoast_wpseo_metadesc": "Una fabada vegana cremosa y fácil."})
+        );
+    }
+
+    fn full_seo_draft() -> RecipeDraft {
+        seo_draft().with_focus_keyphrase("fabada vegana").unwrap()
+    }
+
+    #[test]
+    fn the_focus_keyphrase_goes_in_the_meta_next_to_the_description() {
+        let site = FakeSite::new(vec![answer(
+            201,
+            r#"{"id":77,"meta":{"_yoast_wpseo_metadesc":"Una fabada vegana cremosa y fácil.",
+                                 "_yoast_wpseo_focuskw":"fabada vegana"}}"#,
+        )]);
+        let post = create_draft(&site, &credentials(), &full_seo_draft()).unwrap();
+        assert_eq!(post.meta_description_saved, Some(true));
+        assert_eq!(post.focus_keyphrase_saved, Some(true));
+
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert_eq!(
+            body["meta"],
+            serde_json::json!({
+                "_yoast_wpseo_metadesc": "Una fabada vegana cremosa y fácil.",
+                "_yoast_wpseo_focuskw": "fabada vegana"
+            })
+        );
+    }
+
+    #[test]
+    fn a_keyphrase_alone_sends_only_that_meta() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":1}"#)]);
+        let draft = draft().with_focus_keyphrase("fabada").unwrap();
+        let post = create_draft(&site, &credentials(), &draft).unwrap();
+        assert_eq!(post.meta_description_saved, None);
+        assert_eq!(post.focus_keyphrase_saved, Some(false));
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert_eq!(
+            body["meta"],
+            serde_json::json!({"_yoast_wpseo_focuskw": "fabada"})
+        );
+    }
+
+    #[test]
+    fn each_seo_field_is_noticed_on_its_own() {
+        // The site registered one of the two keys, so one is kept and the other is not.
+        let site = FakeSite::new(vec![answer(
+            201,
+            r#"{"id":1,"meta":{"_yoast_wpseo_metadesc":"Una fabada vegana cremosa y fácil."}}"#,
+        )]);
+        let post = create_draft(&site, &credentials(), &full_seo_draft()).unwrap();
+        assert_eq!(post.meta_description_saved, Some(true));
+        assert_eq!(post.focus_keyphrase_saved, Some(false));
+    }
+
+    #[test]
+    fn a_post_without_slug_or_description_sends_neither() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":1}"#)]);
+        let post = create_draft(&site, &credentials(), &draft()).unwrap();
+        assert_eq!(post.meta_description_saved, None);
+        assert_eq!(post.focus_keyphrase_saved, None);
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert!(body.get("slug").is_none());
+        assert!(body.get("meta").is_none());
+    }
+
+    #[test]
+    fn a_site_that_does_not_keep_the_meta_description_is_noticed() {
+        // WordPress sends `[]` for a post whose type exposes no meta, an object without the key
+        // when the site does not register Yoast's field, and no `meta` at all in older versions.
+        for answer_body in [
+            r#"{"id":1,"meta":[]}"#,
+            r#"{"id":1,"meta":{}}"#,
+            r#"{"id":1,"meta":{"footnotes":""}}"#,
+            r#"{"id":1}"#,
+            r#"{"id":1,"meta":{"_yoast_wpseo_metadesc":""}}"#,
+            r#"{"id":1,"meta":{"_yoast_wpseo_metadesc":"otro texto"}}"#,
+            r#"{"id":1,"meta":{"_yoast_wpseo_metadesc":null}}"#,
+        ] {
+            let site = FakeSite::new(vec![answer(201, answer_body)]);
+            let post = create_draft(&site, &credentials(), &seo_draft()).unwrap();
+            assert_eq!(post.meta_description_saved, Some(false), "{answer_body}");
+        }
     }
 
     #[test]

@@ -12,7 +12,7 @@ use recipe_sync::http::UreqClient;
 use recipe_sync::instagram_api::{list_recent_posts, Post};
 use recipe_sync::instagram_url::{self, InstagramTarget};
 use recipe_sync::publish::{publish_draft, DraftInput};
-use recipe_sync::recipe_html::{caption_to_html, suggest_title};
+use recipe_sync::recipe_html::{prepare_draft_text, slugify, DraftText};
 use recipe_sync::token::{AccessToken, KeyringStore, TokenStore};
 use recipe_sync::wordpress::{CreatedPost, CredentialsStore, KeyringCredentials, WpCredentials};
 use serde::Serialize;
@@ -25,13 +25,6 @@ struct AppState {
     store: KeyringStore,
     wordpress: KeyringCredentials,
     http: UreqClient,
-}
-
-/// The editable starting point of a draft.
-#[derive(Serialize)]
-struct DraftText {
-    title: String,
-    html: String,
 }
 
 /// The saved WordPress settings as the window may see them: never the password.
@@ -49,10 +42,12 @@ fn classify_instagram_url(url: &str) -> Result<InstagramTarget, String> {
 
 #[tauri::command]
 fn prepare_draft(caption: &str) -> DraftText {
-    DraftText {
-        title: suggest_title(caption),
-        html: caption_to_html(caption),
-    }
+    prepare_draft_text(caption)
+}
+
+#[tauri::command]
+fn suggest_slug(title: &str) -> String {
+    slugify(title)
 }
 
 #[tauri::command(async)]
@@ -124,6 +119,7 @@ fn main() -> Result<()> {
         .invoke_handler(tauri::generate_handler![
             classify_instagram_url,
             prepare_draft,
+            suggest_slug,
             has_token,
             save_token,
             clear_token,

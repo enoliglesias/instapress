@@ -6,6 +6,7 @@
   "permissions": [
     "allow-classify-instagram-url",
     "allow-prepare-draft",
+    "allow-suggest-slug",
     "allow-has-token",
     "allow-save-token",
     "allow-clear-token",

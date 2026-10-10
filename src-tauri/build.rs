@@ -4,6 +4,7 @@
 const COMMANDS: &[&str] = &[
     "classify_instagram_url",
     "prepare_draft",
+    "suggest_slug",
     "has_token",
     "save_token",
     "clear_token",
