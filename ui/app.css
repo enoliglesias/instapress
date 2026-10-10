@@ -56,7 +56,8 @@ label {
   gap: 8px;
 }
 
-input:not([type="radio"]):not([type="checkbox"]):not([type="file"]) {
+input:not([type="radio"]):not([type="checkbox"]):not([type="file"]),
+textarea {
   flex: 1;
   min-width: 0;
   padding: 10px 12px;
@@ -299,4 +300,25 @@ input[type="file"] {
   html {
     scroll-behavior: auto;
   }
+}
+
+fieldset input:not([type="radio"]):not([type="checkbox"]):not([type="file"]),
+fieldset textarea {
+  width: 100%;
+}
+
+textarea {
+  display: block;
+  resize: vertical;
+}
+
+#draft-slug-hint,
+#draft-meta-count {
+  min-height: 1.5em;
+  margin: 4px 0 12px;
+}
+
+#publish-warning {
+  margin: 8px 0 0;
+  color: var(--error);
 }

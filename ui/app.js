@@ -182,11 +182,21 @@ $("posts-refresh").addEventListener("click", loadPosts);
 let postImageUrl = null;
 let postPermalink = null;
 let chosenFile = null;
+let slugEdited = false;
+let slugTimer = null;
 
 async function openDraft(post) {
   try {
-    const { title, html } = await invoke("prepare_draft", { caption: post.caption ?? "" });
+    const { title, html, slug, meta_description: metaDescription } = await invoke("prepare_draft", {
+      caption: post.caption ?? "",
+    });
     $("draft-title-input").value = title;
+    // The slug follows the title until the user edits it.
+    $("draft-slug-input").value = slug;
+    slugEdited = false;
+    $("draft-meta").value = metaDescription;
+    $("draft-keyphrase").value = "";
+    updateMetaCount();
     // `html` is built by the backend with every special character of the caption escaped.
     $("editor").innerHTML = html;
   } catch (message) {
@@ -219,6 +229,7 @@ async function openDraft(post) {
   $("image-input").value = "";
   show($("image-file-info"), "");
   $("publish-result").hidden = true;
+  $("publish-warning").hidden = true;
   show($("publish-message"), "");
   $("draft").hidden = false;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -286,6 +297,30 @@ function videoChoice() {
   return { kind: "none" };
 }
 
+function updateMetaCount() {
+  const length = $("draft-meta").value.length;
+  $("draft-meta-count").textContent = length
+    ? `${length} characters. Search engines show about 155.`
+    : "Empty: no meta description is sent.";
+}
+
+// Keep the slug in step with the title until the user writes their own.
+$("draft-title-input").addEventListener("input", () => {
+  if (slugEdited) return;
+  clearTimeout(slugTimer);
+  slugTimer = setTimeout(async () => {
+    try {
+      $("draft-slug-input").value = await invoke("suggest_slug", { title: $("draft-title-input").value });
+    } catch (message) {
+      show($("publish-message"), String(message), true);
+    }
+  }, 150);
+});
+$("draft-slug-input").addEventListener("input", () => {
+  slugEdited = true;
+});
+$("draft-meta").addEventListener("input", updateMetaCount);
+
 $("publish").addEventListener("click", async () => {
   if ($("image-file").checked && !chosenFile) {
     show($("publish-message"), "Choose an image file or pick another image option.", true);
@@ -293,11 +328,15 @@ $("publish").addEventListener("click", async () => {
   }
   $("publish").disabled = true;
   $("publish-result").hidden = true;
+  $("publish-warning").hidden = true;
   show($("publish-message"), "Creating the draft...");
   try {
     const post = await invoke("create_wordpress_draft", {
       draft: {
         title: $("draft-title-input").value,
+        slug: $("draft-slug-input").value,
+        meta_description: $("draft-meta").value,
+        focus_keyphrase: $("draft-keyphrase").value,
         html: $("editor").innerHTML,
         image: imageChoice(),
         video: videoChoice(),
@@ -306,6 +345,13 @@ $("publish").addEventListener("click", async () => {
     show($("publish-message"), "Draft created in WordPress.");
     $("publish-url").value = post.edit_url;
     $("publish-result").hidden = false;
+    // `false` means WordPress ignored the field: the site has to expose Yoast's meta to the API.
+    const unsaved = [];
+    if (post.meta_description_saved === false) unsaved.push("meta description");
+    if (post.focus_keyphrase_saved === false) unsaved.push("focus keyphrase");
+    $("publish-warning").hidden = unsaved.length === 0;
+    $("publish-warning").textContent =
+      `WordPress did not save the ${unsaved.join(" and the ")}: the site has to expose Yoast's fields to the REST API. See knowledge/operational/yoast-meta-description.md.`;
   } catch (message) {
     // An answer that never arrived does not prove nothing was created.
     const unsure = String(message).includes("did not complete")

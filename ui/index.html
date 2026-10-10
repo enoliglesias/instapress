@@ -67,6 +67,19 @@
       <div id="editor" class="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="editor-label"></div>
 
       <fieldset>
+        <legend>SEO</legend>
+        <label for="draft-slug-input">Slug (the end of the address)</label>
+        <input id="draft-slug-input" type="text" spellcheck="false" maxlength="100" autocomplete="off" aria-describedby="draft-slug-hint">
+        <p id="draft-slug-hint" class="hint">Lower-case letters, numbers and hyphens, made from the title until you edit it. Leave it empty to let WordPress choose.</p>
+        <label for="draft-keyphrase">Focus keyphrase</label>
+        <input id="draft-keyphrase" type="text" spellcheck="false" maxlength="100" autocomplete="off" aria-describedby="draft-keyphrase-hint">
+        <p id="draft-keyphrase-hint" class="hint">The word or phrase this post should rank for (Yoast's focus keyphrase). Optional.</p>
+        <label for="draft-meta">Meta description</label>
+        <textarea id="draft-meta" rows="3" maxlength="300" aria-describedby="draft-meta-count"></textarea>
+        <p id="draft-meta-count" class="hint"></p>
+      </fieldset>
+
+      <fieldset>
         <legend>Image</legend>
         <label class="choice"><input type="radio" name="image" value="post" id="image-post"> <span>The post's picture</span></label>
         <div id="image-post-preview" class="image-preview" hidden></div>
@@ -85,6 +98,7 @@
         <button type="button" id="publish">Create draft in WordPress</button>
       </div>
       <p id="publish-message" role="status"></p>
+      <p id="publish-warning" role="alert" hidden></p>
       <div id="publish-result" hidden>
         <p>Open this address in your browser to review and publish it:</p>
         <div class="row">
