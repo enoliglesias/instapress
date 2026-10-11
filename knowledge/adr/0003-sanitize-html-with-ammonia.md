@@ -14,4 +14,4 @@ Use the `ammonia` crate with an explicit tag allow-list (see `knowledge/domain/p
 
 ## Consequences
 - One extra dependency tree (html5ever); it is pure Rust and needs no system libraries.
-- The allowed formatting is small on purpose: paragraphs, line breaks, emphasis, two heading levels, lists, quotes and links.
+- The allowed formatting is what the editor offers and what WordPress keeps in a post for any author: text structure, emphasis, headings from `h2`, lists, quotes, code, tables and links. Nothing active, no images and no styles.

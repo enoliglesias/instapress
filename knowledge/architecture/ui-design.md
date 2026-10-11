@@ -35,5 +35,6 @@ The dark theme follows the system setting (`prefers-color-scheme`). The neutrals
 
 ## Pieces
 - **Tabs** follow the WAI-ARIA tabs pattern (see [`system-context.md`](system-context.md)); a dot on **Credentials** marks that the token or the WordPress settings need attention.
+- **The editor toolbar** groups its buttons with the browser's editing commands (`execCommand`) and marks the ones that apply at the cursor with `aria-pressed`: a paragraph style menu (paragraph, headings 2 to 6, quote, code block); bold, italic, underline, strikethrough, superscript, subscript, inline code and highlight; bullet and numbered lists with indent and outdent (only inside a list); a link dialog (address, text, title and "open in a new tab"; only `http`, `https` and e-mail addresses are accepted, and Ctrl+K opens it); remove link, a table dialog (rows, columns and a header row), a horizontal line, clear formatting, undo and redo. Whatever the toolbar produces is cleaned again by the backend (see [`../domain/publication-draft.md`](../domain/publication-draft.md)). Pasted text still goes in as plain text.
 - **The list of posts** has fixed-height rows (a 72 px picture and two lines of text), so four rows are always the same height. Shadows at the top and the bottom appear only on the side that has more to show.
 - **Controls** all have a visible focus ring in `--accent-text`.

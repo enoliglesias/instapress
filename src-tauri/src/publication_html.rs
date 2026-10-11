@@ -22,21 +22,52 @@ const MAX_FOCUS_KEYPHRASE_CHARS: usize = 100;
 /// More categories than this on one post is a mistake.
 const MAX_CATEGORIES: usize = 20;
 
-const ALLOWED_TAGS: [&str; 14] = [
+/// What the editor can produce and WordPress keeps for any user who may write posts (they are
+/// all in WordPress's own list of tags allowed in post content). The title of the post is the
+/// page's `h1`, so the headings start at `h2`. There are no images (they would need uploading),
+/// no `div` or `span` (they only carry styles) and nothing active.
+const ALLOWED_TAGS: [&str; 41] = [
     "p",
     "br",
+    "hr",
     "strong",
     "b",
     "em",
     "i",
     "u",
+    "s",
+    "strike",
+    "del",
+    "ins",
+    "sup",
+    "sub",
+    "mark",
+    "small",
+    "code",
+    "kbd",
+    "q",
+    "cite",
+    "abbr",
     "h2",
     "h3",
+    "h4",
+    "h5",
+    "h6",
     "ul",
     "ol",
     "li",
     "blockquote",
+    "pre",
     "a",
+    "table",
+    "caption",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+    "th",
+    "td",
+    "colgroup",
 ];
 const ALLOWED_SCHEMES: [&str; 3] = ["http", "https", "mailto"];
 
@@ -391,11 +422,18 @@ pub fn prepare_draft_text(caption: &str) -> DraftText {
     }
 }
 
-/// Cleans editor HTML with an allow-list: paragraphs, line breaks, emphasis, two heading
-/// levels, lists, quotes and links. Scripts, images, styles, classes and event handlers go.
+/// Cleans editor HTML with an allow-list (see [`ALLOWED_TAGS`]): text structure, emphasis,
+/// headings from `h2`, lists, quotes, code, tables and links. Scripts, images, styles, classes and
+/// event handlers go. Only a few attributes survive: `href`, `title` and `target="_blank"` on a
+/// link, `title` on an abbreviation, `start` on an ordered list and the spans of table cells.
 pub fn sanitize_html(html: &str) -> String {
-    let tag_attributes: HashMap<&str, HashSet<&str>> =
-        HashMap::from([("a", HashSet::from(["href"]))]);
+    let tag_attributes: HashMap<&str, HashSet<&str>> = HashMap::from([
+        ("a", HashSet::from(["href", "title", "target"])),
+        ("abbr", HashSet::from(["title"])),
+        ("ol", HashSet::from(["start"])),
+        ("th", HashSet::from(["colspan", "rowspan", "scope"])),
+        ("td", HashSet::from(["colspan", "rowspan"])),
+    ]);
     ammonia::Builder::default()
         .tags(ALLOWED_TAGS.into_iter().collect())
         .tag_attributes(tag_attributes)
@@ -403,6 +441,11 @@ pub fn sanitize_html(html: &str) -> String {
         .url_schemes(ALLOWED_SCHEMES.into_iter().collect())
         .url_relative(ammonia::UrlRelative::Deny)
         .link_rel(Some("noopener noreferrer"))
+        // A link may open in a new tab; no other target (a frame name, `_top`...) is wanted.
+        .attribute_filter(|element, attribute, value| match (element, attribute) {
+            ("a", "target") if value != "_blank" => None,
+            _ => Some(value.into()),
+        })
         .clean(html)
         .to_string()
 }
@@ -532,7 +575,7 @@ impl PublicationDraft {
 
     /// What goes into the post. With a video: the link that jumps to it, the body and then the
     /// player, separated by blank lines. Without one: the body alone. The link and the player are
-    /// added after sanitizing because the sanitizer would remove the iframe.
+    /// added after sanitizing because the sanitizer would remove the script and the styles.
     pub fn content(&self) -> String {
         match &self.video {
             Some(video) => format!("{}\n\n{}\n\n{}", video.link_html(), self.html, video.html()),
@@ -1022,12 +1065,59 @@ mod tests {
              <a href=\"javascript:alert(1)\">bad</a><a href=\"/relative\">rel</a>\
              <a href=\"data:text/html,x\">data</a>",
         );
-        assert!(cleaned.contains("<a href=\"https://x.test/a\" rel=\"noopener noreferrer\">ok</a>"));
+        assert!(cleaned.contains(
+            "<a href=\"https://x.test/a\" target=\"_blank\" rel=\"noopener noreferrer\">ok</a>"
+        ));
         assert!(!cleaned.contains("javascript:"));
         assert!(!cleaned.contains("data:"));
         assert!(!cleaned.contains("/relative"));
         assert!(!cleaned.contains("onclick"));
-        assert!(!cleaned.contains("target"));
+    }
+
+    #[test]
+    fn a_link_may_open_in_a_new_tab_but_no_other_target_survives() {
+        for target in ["_top", "_parent", "_self", "frame", "_BLANK"] {
+            let cleaned = sanitize_html(&format!(
+                "<a href=\"https://x.test/\" target=\"{target}\">x</a>"
+            ));
+            assert!(!cleaned.contains("target"), "{target} -> {cleaned}");
+        }
+        let cleaned = sanitize_html("<a href=\"https://x.test/\" target=\"_blank\">x</a>");
+        assert!(cleaned.contains("target=\"_blank\""));
+        assert!(cleaned.contains("rel=\"noopener noreferrer\""));
+    }
+
+    #[test]
+    fn a_link_keeps_its_title() {
+        let cleaned = sanitize_html("<a href=\"https://x.test/\" title=\"La receta\">x</a>");
+        assert!(cleaned.contains("title=\"La receta\""));
+    }
+
+    #[test]
+    fn every_heading_level_below_the_title_is_kept_and_the_title_level_is_not() {
+        for level in 2..=6 {
+            let html = format!("<h{level}>Paso</h{level}>");
+            assert_eq!(sanitize_html(&html), html);
+        }
+        assert_eq!(sanitize_html("<h1>Titulo</h1>"), "Titulo");
+    }
+
+    #[test]
+    fn the_wider_formatting_of_the_editor_is_kept() {
+        let html = "<p><s>a</s> <del>b</del> <ins>c</ins> <sup>2</sup> <sub>1</sub> <mark>d</mark>                     <small>e</small> <code>f</code> <kbd>g</kbd> <q>h</q> <cite>i</cite>                     <abbr title=\"Organizacion\">ONG</abbr></p><hr><pre>uno
+  dos</pre>";
+        assert_eq!(sanitize_html(html), html);
+    }
+
+    #[test]
+    fn tables_and_list_options_are_kept_without_styles() {
+        let html = "<table><caption>Medidas</caption><thead><tr><th scope=\"col\">A</th>                    <th colspan=\"2\">B</th></tr></thead><tbody><tr><td rowspan=\"2\">1</td>                    <td>2</td></tr></tbody></table><ol start=\"3\"><li>tres</li></ol>";
+        assert_eq!(sanitize_html(html), html);
+        let cleaned = sanitize_html("<table style=\"width:9px\" class=\"x\"><tr><td style=\"color:red\">a</td></tr></table>");
+        assert!(
+            !cleaned.contains("style") && !cleaned.contains("class"),
+            "{cleaned}"
+        );
     }
 
     #[test]
@@ -1137,7 +1227,7 @@ mod tests {
         );
         let link = content.find("href=\"#video\"").unwrap();
         let text = content.find("<p>Hola").unwrap();
-        let player = content.find("<iframe").unwrap();
+        let player = content.find("<blockquote").unwrap();
         assert!(link < text && text < player, "{content}");
         // The editable body stays clean of the link and the player.
         assert_eq!(draft.html(), "<p>Hola &#x1F49A;</p>");
@@ -1229,6 +1319,8 @@ mod tests {
     #[test]
     fn sanitizing_twice_changes_nothing() {
         for html in [
+            "<a href=\"https://x.test/\" target=\"_blank\">x</a>",
+            "<table><tr><td>a</td></tr></table><h4>t</h4><pre>x</pre>",
             "<p>Hola <strong>mundo</strong></p>",
             "<a href=\"https://x.test/\">x</a><script>x</script>",
             "<ul><li>a<li>b</ul><h2>t</h2>",

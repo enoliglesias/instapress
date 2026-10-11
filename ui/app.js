@@ -372,21 +372,216 @@ async function openDraft(post) {
   $("draft-title-input").focus({ preventScroll: true });
 }
 
-for (const button of document.querySelectorAll(".toolbar button")) {
+// --- Editor toolbar ---
+// The toolbar uses the browser's own editing commands. The markup they produce is cleaned again
+// by the backend before anything is sent, so the toolbar only has to be convenient.
+
+const editor = $("editor");
+const PRESSED_COMMANDS = [
+  "bold",
+  "italic",
+  "underline",
+  "strikeThrough",
+  "superscript",
+  "subscript",
+  "insertUnorderedList",
+  "insertOrderedList",
+];
+const BLOCKS = ["p", "h2", "h3", "h4", "h5", "h6", "blockquote", "pre"];
+
+function escapeHtml(text) {
+  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+function selectionRange() {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  return editor.contains(range.commonAncestorContainer) ? range : null;
+}
+
+function closestInEditor(node, selector) {
+  const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+  const found = element?.closest(selector);
+  return found && editor.contains(found) ? found : null;
+}
+
+// Shows what applies at the cursor: the pressed buttons and the paragraph style.
+function updateToolbar() {
+  const range = selectionRange();
+  if (!range) return;
+  for (const command of PRESSED_COMMANDS) {
+    const button = document.querySelector(`.toolbar [data-command="${command}"]`);
+    button.setAttribute("aria-pressed", String(document.queryCommandState(command)));
+  }
+  for (const button of document.querySelectorAll(".toolbar [data-wrap]")) {
+    const inside = closestInEditor(range.startContainer, button.dataset.wrap) !== null;
+    button.setAttribute("aria-pressed", String(inside));
+  }
+  const block = String(document.queryCommandValue("formatBlock")).toLowerCase().replace(/[<>]/g, "");
+  $("editor-block").value = BLOCKS.includes(block) ? block : "p";
+}
+
+document.addEventListener("selectionchange", updateToolbar);
+
+// Wraps the selected text in an inline element, or takes the element off when the cursor is
+// inside one. insertHTML is used so that the browser's undo still works.
+function toggleWrap(tag) {
+  const range = selectionRange();
+  if (!range) return;
+  const existing = closestInEditor(range.startContainer, tag);
+  if (existing) {
+    const whole = document.createRange();
+    whole.selectNode(existing);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(whole);
+    document.execCommand("insertHTML", false, existing.innerHTML);
+  } else if (!range.collapsed) {
+    document.execCommand("insertHTML", false, `<${tag}>${escapeHtml(range.toString())}</${tag}>`);
+  }
+}
+
+for (const button of document.querySelectorAll(".toolbar button[data-command], .toolbar button[data-wrap]")) {
   // Keep the text selection in the editor when a toolbar button is pressed.
   button.addEventListener("mousedown", (event) => event.preventDefault());
   button.addEventListener("click", () => {
-    const command = button.dataset.command;
-    if (command === "heading") {
-      // A second press on a heading turns it back into a paragraph.
-      const current = String(document.queryCommandValue("formatBlock")).toLowerCase();
-      document.execCommand("formatBlock", false, current === "h2" ? "p" : "h2");
+    editor.focus();
+    if (button.dataset.wrap) {
+      toggleWrap(button.dataset.wrap);
+    } else if (["indent", "outdent"].includes(button.dataset.command)) {
+      // Outside a list these would wrap the text in a styled quote that the site does not keep.
+      if (closestInEditor(selectionRange()?.startContainer, "li")) {
+        document.execCommand(button.dataset.command);
+      }
     } else {
-      document.execCommand(command);
+      document.execCommand(button.dataset.command);
     }
-    $("editor").focus();
+    updateToolbar();
   });
 }
+
+$("editor-block").addEventListener("change", () => {
+  editor.focus();
+  document.execCommand("formatBlock", false, `<${$("editor-block").value}>`);
+  updateToolbar();
+});
+
+// --- Links and tables ---
+
+let savedRange = null;
+let editedLink = null;
+
+function rememberSelection() {
+  const range = selectionRange();
+  savedRange = range ? range.cloneRange() : null;
+}
+
+function restoreSelection() {
+  editor.focus();
+  if (!savedRange) return;
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(savedRange);
+}
+
+// Turns what was typed into an address that the site keeps: http, https or mailto only.
+function normalizeLink(raw) {
+  const text = raw.trim();
+  if (/^mailto:[^\s@]+@[^\s@]+$/i.test(text)) return text;
+  if (/^https?:\/\/[^\s/]+\S*$/i.test(text)) return text;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(text)) return null;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)) return `mailto:${text}`;
+  if (/^[^\s/]+\.[^\s/]+\S*$/.test(text)) return `https://${text}`;
+  return null;
+}
+
+function openLinkDialog() {
+  rememberSelection();
+  editedLink = savedRange ? closestInEditor(savedRange.startContainer, "a") : null;
+  $("link-url").value = editedLink?.getAttribute("href") ?? "";
+  $("link-title").value = editedLink?.getAttribute("title") ?? "";
+  $("link-new-tab").checked = editedLink?.getAttribute("target") === "_blank";
+  $("link-text").value = "";
+  $("link-text-row").hidden = Boolean(editedLink) || !savedRange?.collapsed;
+  $("link-error").textContent = "";
+  $("link-dialog").showModal();
+  $("link-url").select();
+}
+
+function applyLink() {
+  const url = normalizeLink($("link-url").value);
+  if (!url) {
+    $("link-error").textContent = "Enter a web address (https://...) or an e-mail address.";
+    return;
+  }
+  const title = $("link-title").value.trim();
+  const newTab = $("link-new-tab").checked;
+  const finish = (anchor) => {
+    if (title) anchor.setAttribute("title", title);
+    else anchor.removeAttribute("title");
+    if (newTab) anchor.setAttribute("target", "_blank");
+    else anchor.removeAttribute("target");
+  };
+  const text = $("link-text").value.trim() || url;
+  $("link-dialog").close();
+  if (editedLink) {
+    editedLink.setAttribute("href", url);
+    finish(editedLink);
+  } else {
+    restoreSelection();
+    if (selectionRange()?.collapsed) {
+      document.execCommand("insertHTML", false, `<a href="${escapeHtml(url)}">${escapeHtml(text)}</a>`);
+    } else {
+      document.execCommand("createLink", false, url);
+    }
+    const selection = window.getSelection();
+    for (const anchor of editor.querySelectorAll("a")) {
+      if (anchor.getAttribute("href") === url && selection.containsNode(anchor, true)) finish(anchor);
+    }
+  }
+  editedLink = null;
+  updateToolbar();
+}
+
+$("tool-link").addEventListener("mousedown", (event) => event.preventDefault());
+$("tool-link").addEventListener("click", openLinkDialog);
+$("link-apply").addEventListener("click", applyLink);
+$("link-cancel").addEventListener("click", () => $("link-dialog").close());
+$("link-url").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    applyLink();
+  }
+});
+editor.addEventListener("keydown", (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    openLinkDialog();
+  }
+});
+
+$("tool-table").addEventListener("mousedown", (event) => event.preventDefault());
+$("tool-table").addEventListener("click", () => {
+  rememberSelection();
+  $("table-dialog").showModal();
+  $("table-rows").select();
+});
+$("table-cancel").addEventListener("click", () => $("table-dialog").close());
+$("table-apply").addEventListener("click", () => {
+  const rows = Math.min(20, Math.max(1, Number.parseInt($("table-rows").value, 10) || 1));
+  const cols = Math.min(8, Math.max(1, Number.parseInt($("table-cols").value, 10) || 1));
+  const header = $("table-header").checked && rows > 1;
+  const cells = (tag) => `<${tag}><br></${tag}>`.repeat(cols);
+  const bodyRows = rows - (header ? 1 : 0);
+  const html =
+    "<table>" +
+    (header ? `<thead><tr>${cells("th")}</tr></thead>` : "") +
+    `<tbody>${`<tr>${cells("td")}</tr>`.repeat(bodyRows)}</tbody></table><p><br></p>`;
+  $("table-dialog").close();
+  restoreSelection();
+  document.execCommand("insertHTML", false, html);
+});
 
 // Pasted text goes in as plain text: the formatting of another page is not wanted, and the
 // backend would strip most of it anyway.

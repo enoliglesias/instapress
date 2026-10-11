@@ -288,6 +288,7 @@ button:disabled {
 
 input:focus-visible,
 textarea:focus-visible,
+select:focus-visible,
 button:focus-visible,
 .scroll-box:focus-visible,
 .editor:focus-visible {
@@ -370,12 +371,32 @@ input[type="file"] {
 .toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 6px 14px;
   margin-bottom: 6px;
 }
 
+.tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .toolbar button {
-  padding: 6px 12px;
+  min-width: 36px;
+  padding: 6px 10px;
+}
+
+.toolbar select {
+  width: auto;
+  min-width: 140px;
+  padding: 6px 8px;
+}
+
+/* A button that is on at the cursor: filled with the accent like the primary buttons. */
+.toolbar button[aria-pressed="true"] {
+  border-color: var(--accent-text);
+  background: var(--accent);
+  color: var(--accent-fg);
 }
 
 .editor {
@@ -388,6 +409,75 @@ input[type="file"] {
 
 .editor h2 {
   font-size: 18px;
+}
+
+.editor h3 {
+  font-size: 16px;
+}
+
+.editor h4,
+.editor h5,
+.editor h6 {
+  font-size: 14px;
+}
+
+.editor h2,
+.editor h3,
+.editor h4,
+.editor h5,
+.editor h6 {
+  margin: 0.8em 0 0.4em;
+}
+
+.editor blockquote {
+  margin: 0.8em 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+
+.editor pre,
+.editor code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.editor pre {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
+.editor mark {
+  background: #ffe58a;
+  color: #14211f;
+}
+
+.editor a {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+
+.editor hr {
+  border: 0;
+  border-top: 1px solid var(--field-line);
+}
+
+.editor table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+}
+
+.editor th,
+.editor td {
+  min-width: 60px;
+  padding: 4px 8px;
+  border: 1px solid var(--field-line);
+}
+
+.editor th {
+  background: var(--bg);
 }
 
 /* Recent posts: four rows are visible and the box inside scrolls, not the whole window -------- */
@@ -585,4 +675,28 @@ dialog::backdrop {
 
 dialog h2 {
   margin-top: 0;
+}
+
+/* Editor controls: the paragraph style, and the link and table dialogs */
+select {
+  border: 1px solid var(--field-line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+
+dialog label:not(.choice) {
+  display: block;
+  margin-bottom: 4px;
+}
+
+dialog input:not([type="checkbox"]) {
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+dialog .choice {
+  margin-bottom: 8px;
 }

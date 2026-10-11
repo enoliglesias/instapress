@@ -75,12 +75,46 @@
         <input id="draft-title-input" type="text" maxlength="200">
 
         <span class="label" id="editor-label">Text</span>
-        <div class="toolbar" role="group" aria-label="Text formatting">
-          <button type="button" data-command="bold" class="secondary" title="Bold" aria-label="Bold"><b>B</b></button>
-          <button type="button" data-command="italic" class="secondary" title="Italic" aria-label="Italic"><i>I</i></button>
-          <button type="button" data-command="heading" class="secondary" title="Heading" aria-label="Heading">H</button>
-          <button type="button" data-command="insertUnorderedList" class="secondary" title="Bullet list" aria-label="Bullet list">&bull; List</button>
-          <button type="button" data-command="insertOrderedList" class="secondary" title="Numbered list" aria-label="Numbered list">1. List</button>
+        <div class="toolbar" role="toolbar" aria-label="Text formatting" aria-controls="editor">
+          <div class="tool-group" role="group" aria-label="Paragraph style">
+            <select id="editor-block" aria-label="Paragraph style">
+              <option value="p">Paragraph</option>
+              <option value="h2">Heading 2</option>
+              <option value="h3">Heading 3</option>
+              <option value="h4">Heading 4</option>
+              <option value="h5">Heading 5</option>
+              <option value="h6">Heading 6</option>
+              <option value="blockquote">Quote</option>
+              <option value="pre">Code block</option>
+            </select>
+          </div>
+          <div class="tool-group" role="group" aria-label="Text">
+            <button type="button" data-command="bold" class="secondary" title="Bold (Ctrl+B)" aria-label="Bold" aria-pressed="false"><b>B</b></button>
+            <button type="button" data-command="italic" class="secondary" title="Italic (Ctrl+I)" aria-label="Italic" aria-pressed="false"><i>I</i></button>
+            <button type="button" data-command="underline" class="secondary" title="Underline (Ctrl+U)" aria-label="Underline" aria-pressed="false"><u>U</u></button>
+            <button type="button" data-command="strikeThrough" class="secondary" title="Strikethrough" aria-label="Strikethrough" aria-pressed="false"><s>S</s></button>
+            <button type="button" data-command="superscript" class="secondary" title="Superscript" aria-label="Superscript" aria-pressed="false">x&sup2;</button>
+            <button type="button" data-command="subscript" class="secondary" title="Subscript" aria-label="Subscript" aria-pressed="false">x&#8322;</button>
+            <button type="button" data-wrap="code" class="secondary" title="Inline code" aria-label="Inline code" aria-pressed="false">&lt;/&gt;</button>
+            <button type="button" data-wrap="mark" class="secondary" title="Highlight" aria-label="Highlight" aria-pressed="false">Mark</button>
+          </div>
+          <div class="tool-group" role="group" aria-label="Lists">
+            <button type="button" data-command="insertUnorderedList" class="secondary" title="Bullet list" aria-label="Bullet list" aria-pressed="false">&bull; List</button>
+            <button type="button" data-command="insertOrderedList" class="secondary" title="Numbered list" aria-label="Numbered list" aria-pressed="false">1. List</button>
+            <button type="button" data-command="outdent" class="secondary" title="Outdent list item" aria-label="Outdent list item">&larr;</button>
+            <button type="button" data-command="indent" class="secondary" title="Indent list item" aria-label="Indent list item">&rarr;</button>
+          </div>
+          <div class="tool-group" role="group" aria-label="Insert">
+            <button type="button" id="tool-link" class="secondary" title="Link (Ctrl+K)" aria-label="Link">Link</button>
+            <button type="button" data-command="unlink" class="secondary" title="Remove link" aria-label="Remove link">Unlink</button>
+            <button type="button" id="tool-table" class="secondary" title="Table" aria-label="Table">Table</button>
+            <button type="button" data-command="insertHorizontalRule" class="secondary" title="Horizontal line" aria-label="Horizontal line">Line</button>
+          </div>
+          <div class="tool-group" role="group" aria-label="Edit">
+            <button type="button" data-command="removeFormat" class="secondary" title="Clear formatting" aria-label="Clear formatting">Clear</button>
+            <button type="button" data-command="undo" class="secondary" title="Undo (Ctrl+Z)" aria-label="Undo">&#8630;</button>
+            <button type="button" data-command="redo" class="secondary" title="Redo (Ctrl+Y)" aria-label="Redo">&#8631;</button>
+          </div>
         </div>
         <div id="editor" class="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="editor-label"></div>
 
@@ -120,7 +154,7 @@
 
         <fieldset id="video-options" hidden>
           <legend>Video</legend>
-          <label class="choice"><input type="checkbox" id="video-embed"> <span>Show the post's video below the text, with a "Ver el vídeo" link at the top (Instagram player)</span></label>
+          <label class="choice"><input type="checkbox" id="video-embed"> <span>Show the post's video below the text, with a "Ver el vídeo" link at the top (Instagram embed)</span></label>
         </fieldset>
 
         <div class="row actions">
@@ -151,6 +185,37 @@
     <p class="hint">Provided "as is", without warranty of any kind. Not affiliated with or endorsed by Meta, Instagram or WordPress.</p>
     <div class="row actions"><button type="button" id="about-close">Close</button></div>
   </dialog>
+  <dialog id="link-dialog" aria-labelledby="link-dialog-title">
+    <h2 id="link-dialog-title">Link</h2>
+    <label for="link-url">Address</label>
+    <input id="link-url" type="text" spellcheck="false" autocomplete="off" placeholder="https://, or an e-mail address">
+    <div id="link-text-row">
+      <label for="link-text">Text to show</label>
+      <input id="link-text" type="text" autocomplete="off">
+    </div>
+    <label for="link-title">Title (optional)</label>
+    <input id="link-title" type="text" autocomplete="off">
+    <label class="choice"><input type="checkbox" id="link-new-tab"> <span>Open in a new tab</span></label>
+    <p id="link-error" class="hint" role="alert"></p>
+    <div class="row actions">
+      <button type="button" id="link-apply">Apply</button>
+      <button type="button" id="link-cancel" class="secondary">Cancel</button>
+    </div>
+  </dialog>
+
+  <dialog id="table-dialog" aria-labelledby="table-dialog-title">
+    <h2 id="table-dialog-title">Table</h2>
+    <label for="table-rows">Rows</label>
+    <input id="table-rows" type="number" min="1" max="20" value="3">
+    <label for="table-cols">Columns</label>
+    <input id="table-cols" type="number" min="1" max="8" value="2">
+    <label class="choice"><input type="checkbox" id="table-header" checked> <span>First row is a header</span></label>
+    <div class="row actions">
+      <button type="button" id="table-apply">Insert</button>
+      <button type="button" id="table-cancel" class="secondary">Cancel</button>
+    </div>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>
