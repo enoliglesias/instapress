@@ -30,6 +30,9 @@ pub struct DraftInput {
     /// Optional: the ids of the categories. None means WordPress chooses its default.
     #[serde(default)]
     pub categories: Vec<u64>,
+    /// Optional: the date and time of the post in UTC (`YYYY-MM-DDTHH:MM:SS`). Blank means none.
+    #[serde(default)]
+    pub date_gmt: String,
 }
 
 /// Why the draft could not be created.
@@ -63,7 +66,8 @@ where
         .with_slug(&input.slug)
         .with_meta_description(&input.meta_description)?
         .with_focus_keyphrase(&input.focus_keyphrase)?
-        .with_categories(&input.categories)?;
+        .with_categories(&input.categories)?
+        .with_date_gmt(&input.date_gmt)?;
     let draft = draft.with_video(video::resolve(input.video)?);
     let credentials = store.load()?.ok_or(WordPressError::NoSettings)?;
     let image = resolve(input.image, fetcher)?;
@@ -136,6 +140,7 @@ mod tests {
             meta_description: String::new(),
             focus_keyphrase: String::new(),
             categories: Vec::new(),
+            date_gmt: String::new(),
         }
     }
 
@@ -273,6 +278,26 @@ mod tests {
         assert!(content.contains("src=\"https://www.instagram.com/embed.js\""));
         assert!(content.contains("<div id=\"video\""));
         assert!(content.ends_with("<!-- /wp:html -->"));
+    }
+
+    #[test]
+    fn the_chosen_date_reaches_the_post_and_a_bad_one_stops_everything_before_any_work() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":5}"#)]);
+        let mut dated = input(ImageChoice::None);
+        dated.date_gmt = "2025-01-28T09:30:00".into();
+        publish_draft(&saved(), &site, &fetcher(200), dated).unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&site.sent.borrow()[0].2).unwrap();
+        assert_eq!(body["date_gmt"], "2025-01-28T09:30:00");
+
+        let site = FakeSite::new(vec![]);
+        let mut bad = input(ImageChoice::None);
+        bad.date_gmt = "2025-02-30T09:30:00".into();
+        let error = publish_draft(&saved(), &site, &fetcher(200), bad).unwrap_err();
+        assert!(matches!(
+            error,
+            PublishError::Draft(DraftError::InvalidDate(_))
+        ));
+        assert!(site.sent.borrow().is_empty());
     }
 
     #[test]

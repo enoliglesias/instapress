@@ -85,6 +85,8 @@ pub enum DraftError {
     FocusKeyphraseTooLong { length: usize, max: usize },
     #[error("{count} categories are chosen; the limit is {max}")]
     TooManyCategories { count: usize, max: usize },
+    #[error("`{0}` is not a date and time that exists; use year-month-dayThour:minute:second")]
+    InvalidDate(String),
 }
 
 /// The titles of the sections of a publication, as they are written once accents and case are folded
@@ -450,6 +452,49 @@ pub fn sanitize_html(html: &str) -> String {
         .to_string()
 }
 
+/// Whether `text` is exactly `YYYY-MM-DDTHH:MM:SS` and names a moment that exists, between the
+/// years 1970 and 2100. Checked by hand so that nothing else about the text can get through.
+fn is_date_time(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    if bytes.len() != 19 {
+        return false;
+    }
+    let separators = [(4, b'-'), (7, b'-'), (10, b'T'), (13, b':'), (16, b':')];
+    if separators.iter().any(|&(at, sep)| bytes[at] != sep) {
+        return false;
+    }
+    let digits = |from: usize, to: usize| -> Option<u32> {
+        let part = &text[from..to];
+        part.bytes()
+            .all(|b| b.is_ascii_digit())
+            .then(|| part.parse().ok())
+            .flatten()
+    };
+    let (Some(year), Some(month), Some(day), Some(hour), Some(minute), Some(second)) = (
+        digits(0, 4),
+        digits(5, 7),
+        digits(8, 10),
+        digits(11, 13),
+        digits(14, 16),
+        digits(17, 19),
+    ) else {
+        return false;
+    };
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let days_in_month = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return false,
+    };
+    (1970..=2100).contains(&year)
+        && (1..=days_in_month).contains(&day)
+        && hour < 24
+        && minute < 60
+        && second < 60
+}
+
 /// Whether a character needs four bytes in UTF-8: emoji and every other character beyond U+FFFF.
 /// A WordPress database still on the old 3-byte `utf8` charset cannot store them and refuses the
 /// whole post (`db_insert_error`).
@@ -495,6 +540,7 @@ pub struct PublicationDraft {
     meta_description: Option<String>,
     focus_keyphrase: Option<String>,
     categories: Vec<u64>,
+    date_gmt: Option<String>,
 }
 
 impl PublicationDraft {
@@ -534,6 +580,7 @@ impl PublicationDraft {
             meta_description: None,
             focus_keyphrase: None,
             categories: Vec::new(),
+            date_gmt: None,
         })
     }
 
@@ -626,6 +673,25 @@ impl PublicationDraft {
 
     pub fn categories(&self) -> &[u64] {
         &self.categories
+    }
+
+    /// Sets the date and time of the post, in UTC, as `YYYY-MM-DDTHH:MM:SS`. A blank one means
+    /// none: WordPress then dates the post when it is published.
+    pub fn with_date_gmt(mut self, text: &str) -> Result<Self, DraftError> {
+        let text = text.trim();
+        if text.is_empty() {
+            self.date_gmt = None;
+        } else if is_date_time(text) {
+            self.date_gmt = Some(text.to_owned());
+        } else {
+            return Err(DraftError::InvalidDate(text.to_owned()));
+        }
+        Ok(self)
+    }
+
+    /// The date and time chosen for the post, in UTC.
+    pub fn date_gmt(&self) -> Option<&str> {
+        self.date_gmt.as_deref()
     }
 
     pub fn image(&self) -> Option<&Image> {
@@ -967,6 +1033,52 @@ mod tests {
                 max: 100
             })
         );
+    }
+
+    #[test]
+    fn a_draft_keeps_a_valid_date_and_a_blank_one_means_none() {
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        assert_eq!(draft.date_gmt(), None);
+        let draft = draft.with_date_gmt(" 2025-01-28T09:30:00 ").unwrap();
+        assert_eq!(draft.date_gmt(), Some("2025-01-28T09:30:00"));
+        let draft = draft.with_date_gmt("  ").unwrap();
+        assert_eq!(draft.date_gmt(), None);
+    }
+
+    #[test]
+    fn a_date_that_does_not_exist_is_rejected() {
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        for bad in [
+            "2025-13-01T10:00:00",
+            "2025-00-10T10:00:00",
+            "2025-02-30T10:00:00",
+            "2023-02-29T10:00:00",
+            "2025-04-31T10:00:00",
+            "2025-01-28T24:00:00",
+            "2025-01-28T10:60:00",
+            "2025-01-28T10:00:60",
+            "1969-12-31T23:59:59",
+            "2101-01-01T00:00:00",
+            "2025-01-28 10:00:00",
+            "2025-01-28T10:00",
+            "2025-01-28T10:00:00Z",
+            "28/01/2025",
+            "mañana",
+            "2025-01-28T10:00:00'; drop",
+        ] {
+            assert_eq!(
+                draft.clone().with_date_gmt(bad),
+                Err(DraftError::InvalidDate(bad.to_owned())),
+                "{bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_leap_day_is_a_real_date() {
+        let draft = PublicationDraft::new("Titulo", "<p>Hola</p>").unwrap();
+        assert!(draft.clone().with_date_gmt("2024-02-29T00:00:00").is_ok());
+        assert!(draft.with_date_gmt("2100-02-29T00:00:00").is_err());
     }
 
     #[test]

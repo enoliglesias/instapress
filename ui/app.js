@@ -315,6 +315,27 @@ let slugTimer = null;
 let categories = null;
 const selectedCategories = new Set();
 
+// Instagram writes its time zone as +0000, which not every browser reads: add the colon.
+function parseTimestamp(text) {
+  if (!text) return null;
+  const date = new Date(text.replace(/([+-]\d\d)(\d\d)$/, "$1:$2"));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// The value of a datetime-local field is the time of this computer, without a zone.
+function toInputValue(date) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// The chosen moment in UTC, as the backend wants it, or an empty text when none is chosen.
+function chosenDateGmt() {
+  const value = $("draft-date").value;
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 19);
+}
+
 async function openDraft(post) {
   try {
     const { title, html, slug, meta_description: metaDescription } = await invoke("prepare_draft", {
@@ -355,6 +376,9 @@ async function openDraft(post) {
   (postImageUrl ? $("image-post") : $("image-none")).checked = true;
 
   // The player is offered only for a video post, and it is on by default there.
+  // The post keeps the date of the Instagram post unless the user picks another.
+  const posted = parseTimestamp(post.timestamp);
+  $("draft-date").value = posted ? toInputValue(posted) : "";
   postPermalink = post.media_type === "VIDEO" && post.permalink ? post.permalink : null;
   $("video-options").hidden = !postPermalink;
   $("video-embed").checked = Boolean(postPermalink);
@@ -712,6 +736,7 @@ $("publish").addEventListener("click", async () => {
         meta_description: $("draft-meta").value,
         focus_keyphrase: $("draft-keyphrase").value,
         categories: [...selectedCategories],
+        date_gmt: chosenDateGmt(),
         html: $("editor").innerHTML,
         image: imageChoice(),
         video: videoChoice(),

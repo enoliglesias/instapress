@@ -536,6 +536,12 @@ pub fn create_draft<H: WpHttp>(
     if let Some(slug) = draft.slug() {
         body["slug"] = slug.into();
     }
+    // In UTC, so the date does not depend on the time zone of the site. Left out, WordPress dates
+    // the post when it is published. The status stays `draft`, so a future date does not
+    // schedule anything until the user publishes.
+    if let Some(date) = draft.date_gmt() {
+        body["date_gmt"] = date.into();
+    }
     if !draft.categories().is_empty() {
         body["categories"] = draft.categories().into();
     }
@@ -837,6 +843,28 @@ pub(crate) mod tests {
 
     fn full_seo_draft() -> PublicationDraft {
         seo_draft().with_focus_keyphrase("fabada vegana").unwrap()
+    }
+
+    #[test]
+    fn a_chosen_date_goes_in_the_post_as_utc_and_the_status_stays_draft() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":77}"#)]);
+        let dated = draft().with_date_gmt("2025-01-28T09:30:00").unwrap();
+        create_draft(&site, &credentials(), &dated).unwrap();
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert_eq!(body["date_gmt"], "2025-01-28T09:30:00");
+        assert!(body.get("date").is_none());
+        assert_eq!(body["status"], "draft");
+    }
+
+    #[test]
+    fn without_a_date_none_is_sent_so_wordpress_uses_the_day_it_is_published() {
+        let site = FakeSite::new(vec![answer(201, r#"{"id":77}"#)]);
+        create_draft(&site, &credentials(), &draft()).unwrap();
+        let sent = site.sent.borrow();
+        let body: serde_json::Value = serde_json::from_slice(&sent[0].2).unwrap();
+        assert!(body.get("date_gmt").is_none());
+        assert!(body.get("date").is_none());
     }
 
     #[test]

@@ -26,7 +26,7 @@ The window gets them as `CategoryItem { id, name, depth }` in **tree order**: ea
 ## Publishing
 `create_draft` does, in order:
 1. If there is an image, `POST /media` with the raw bytes, its real `Content-Type` and `Content-Disposition: attachment; filename="..."`. The answer's `id` becomes the featured image.
-2. `POST /posts` with a JSON body: `title`, `content` (the sanitized HTML, with a "Ver el vídeo" link before it and the Instagram player after it when there is a video), `status`, `featured_media` when there is an image, `slug` when the cleaned slug is not empty, `categories` (a list of ids) when some are chosen, and `meta` with `_yoast_wpseo_metadesc` (the meta description) and `_yoast_wpseo_focuskw` (the focus keyphrase) for those that are not blank.
+2. `POST /posts` with a JSON body: `title`, `content` (the sanitized HTML, with a "Ver el vídeo" link before it and the Instagram player after it when there is a video), `status`, `featured_media` when there is an image, `slug` when the cleaned slug is not empty, `date_gmt` when a date was chosen (in UTC; the status is still `draft`), `categories` (a list of ids) when some are chosen, and `meta` with `_yoast_wpseo_metadesc` (the meta description) and `_yoast_wpseo_focuskw` (the focus keyphrase) for those that are not blank.
 
 The status is always `draft`: the user reviews and publishes from WordPress. Both requests use HTTP Basic authentication over HTTPS, follow no redirects and use the longer transfer timeout (see [`../architecture/http-client.md`](../architecture/http-client.md)).
 
@@ -49,8 +49,8 @@ A `db_insert_error` ("could not insert the post into the database") comes back a
 The Application Password is never in a URL, a log line or an error message.
 
 ## Order of the whole flow (`publish::publish_draft`)
-`DraftInput` is `{ title, html, image, video, slug, meta_description, focus_keyphrase, categories }` (the last five are optional). Nothing is downloaded or sent before the cheap checks pass:
-1. The title and body are validated and sanitized, and the video choice is checked. A bad title, an empty text, a meta description over 300 characters, a focus keyphrase over 100, more than 20 categories or a video address that is not a post or reel stops here.
+`DraftInput` is `{ title, html, image, video, slug, meta_description, focus_keyphrase, categories, date_gmt }` (the last six are optional). Nothing is downloaded or sent before the cheap checks pass:
+1. The title and body are validated and sanitized, and the video choice is checked. A bad title, an empty text, a meta description over 300 characters, a date that does not exist, a focus keyphrase over 100, more than 20 categories or a video address that is not a post or reel stops here.
 2. The saved settings are loaded. Without them the flow stops with `NoSettings`.
 3. The image is resolved (downloaded or decoded). A bad image stops here and nothing is created on the site.
 4. The image is uploaded, then the post is created.

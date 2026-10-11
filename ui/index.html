@@ -143,6 +143,13 @@
         </fieldset>
 
         <fieldset>
+          <legend>Date</legend>
+          <label for="draft-date">Date and time of the post</label>
+          <input id="draft-date" type="datetime-local" aria-describedby="draft-date-hint">
+          <p id="draft-date-hint" class="hint">It starts with the date and time of the Instagram post. Pick another one if you want, or empty the field and WordPress dates the post the day you publish it. The time is the one of this computer. The post stays a draft, whatever the date.</p>
+        </fieldset>
+
+        <fieldset>
           <legend>Image</legend>
           <label class="choice"><input type="radio" name="image" value="post" id="image-post"> <span>The post's picture</span></label>
           <div id="image-post-preview" class="image-preview" hidden></div>
