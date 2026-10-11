@@ -266,9 +266,11 @@ mod tests {
         let content = body["content"].as_str().unwrap();
         let link = content.find("<a href=\"#video\">Ver el vídeo</a>").unwrap();
         let text = content.find("<p>Con fabes</p>").unwrap();
-        let player = content.find("<iframe").unwrap();
+        let player = content.find("<blockquote").unwrap();
         assert!(link < text && text < player, "{content}");
-        assert!(content.contains("src=\"https://www.instagram.com/reel/Dx1Ab-cdEfG/embed/\""));
+        assert!(content
+            .contains("data-instgrm-permalink=\"https://www.instagram.com/reel/Dx1Ab-cdEfG/"));
+        assert!(content.contains("src=\"https://www.instagram.com/embed.js\""));
         assert!(content.contains("<div id=\"video\""));
         assert!(content.ends_with("<!-- /wp:html -->"));
     }

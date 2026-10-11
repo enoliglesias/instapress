@@ -160,5 +160,5 @@ Your token and password are stored in the operating system's credential store (W
 | "The site redirected" | The address saved is not the final one (`http` instead of `https`, or without `www`) | Enter the address as it shows in the browser |
 | `db_insert_error` | Four-byte characters on a 3-byte database | The app already avoids them; update the app if you see it |
 | Draft created but a warning about the meta description or the focus keyphrase | The snippet of part 4 is missing or inactive | Part 4 |
-| Video does not play on the site | The Instagram player may open Instagram on click; it cannot hide Instagram's header or comments | Expected, nothing to change |
+| Only a link "Ver esta publicación en Instagram" shows instead of the video | The user of the Application Password may not post unfiltered HTML, so WordPress removed Instagram's script, or a blocker or consent banner stops it | Use an Administrator or Editor user (single site) and allow `instagram.com/embed.js` |
 | The pictures of the list are missing | Instagram picture links are temporary | Press **Refresh** |

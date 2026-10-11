@@ -1,9 +1,10 @@
 //! The Instagram player that can go below the text of a draft, and the link that jumps to it.
 //!
-//! The player is Instagram's own embed in an `<iframe>`; nothing is downloaded or stored on the
-//! site. The address the window sends is not trusted: it is parsed, only a post or a reel is
-//! accepted, and the iframe address is built from the validated shortcode alone, so no text from
-//! the window ever reaches the markup.
+//! The player is Instagram's own embed, the markup that Instagram gives under "Embed" in a post:
+//! a `blockquote` and the script `embed.js`, which turns it into the player and sizes it. Nothing
+//! is downloaded or stored on the site. The address the window sends is not trusted: it is parsed,
+//! only a post or a reel is accepted, and the markup is built from the validated shortcode alone,
+//! so no text from the window ever reaches it.
 
 /// The `id` of the section that holds the player, and the target of the "watch the video" link.
 const SECTION_ID: &str = "video";
@@ -16,10 +17,14 @@ use thiserror::Error;
 use crate::instagram_url::{self, InstagramTarget};
 
 /// Width of the player on the page, in pixels. Instagram's player is never wider than this.
-const PLAYER_WIDTH: u32 = 400;
-/// Height sized for a vertical reel at that width. Instagram resizes its player only with a
-/// script that the app does not add, so the height is fixed.
-const PLAYER_HEIGHT: u32 = 880;
+const PLAYER_WIDTH: u32 = 540;
+/// Version of Instagram's embed that the `blockquote` asks the script for.
+const EMBED_VERSION: u32 = 14;
+/// The script of the embed. Without the script the visitor sees only the link inside the
+/// `blockquote`; with it the player plays the video on the page.
+const EMBED_SCRIPT: &str = "https://www.instagram.com/embed.js";
+/// The text of the link that shows until the script has made the player. The site is in Spanish.
+const FALLBACK_TEXT: &str = "Ver esta publicación en Instagram";
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum VideoError {
@@ -41,7 +46,7 @@ pub enum VideoChoice {
 /// A validated player address.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoEmbed {
-    src: String,
+    permalink: String,
 }
 
 impl VideoEmbed {
@@ -54,13 +59,13 @@ impl VideoEmbed {
             _ => return Err(VideoError::NotAPost(permalink.to_owned())),
         };
         Ok(Self {
-            src: format!("https://www.instagram.com/{path}/embed/"),
+            permalink: format!("https://www.instagram.com/{path}/"),
         })
     }
 
-    /// The address of the iframe.
-    pub fn src(&self) -> &str {
-        &self.src
+    /// The canonical address of the post or reel, built from the validated shortcode.
+    pub fn permalink(&self) -> &str {
+        &self.permalink
     }
 
     /// The link for the top of the post, a `wp:paragraph` block that jumps to the player.
@@ -72,17 +77,26 @@ impl VideoEmbed {
         )
     }
 
-    /// The markup for below the text: a `wp:html` block with the player in a container that is
-    /// the target of [`link_html`](Self::link_html).
+    /// The markup for below the text: a `wp:html` block with Instagram's embed in a container that
+    /// is the target of [`link_html`](Self::link_html). Instagram's script replaces the
+    /// `blockquote` with the player and gives it the right height.
     pub fn html(&self) -> String {
+        let link = format!(
+            "{}?utm_source=ig_embed&amp;utm_campaign=loading",
+            self.permalink
+        );
         format!(
             "<!-- wp:html -->\n\
              <div id=\"{SECTION_ID}\" style=\"max-width:{PLAYER_WIDTH}px;margin:1.5em auto 0\">\
-             <iframe src=\"{}\" title=\"Instagram video\" width=\"{PLAYER_WIDTH}\" \
-             height=\"{PLAYER_HEIGHT}\" style=\"width:100%;border:0\" loading=\"lazy\" \
-             allowfullscreen></iframe></div>\n\
-             <!-- /wp:html -->",
-            self.src
+             <blockquote class=\"instagram-media\" data-instgrm-permalink=\"{link}\" \
+             data-instgrm-version=\"{EMBED_VERSION}\" style=\"background:#fff;border:0;\
+             border-radius:3px;box-shadow:0 0 1px 0 rgba(0,0,0,.5),0 1px 10px 0 rgba(0,0,0,.15);\
+             margin:1px;max-width:540px;min-width:326px;padding:0;width:calc(100% - 2px)\">\
+             <div style=\"padding:16px\"><a href=\"{link}\" style=\"color:#3897f0;\
+             font-family:Arial,sans-serif;font-size:14px;text-decoration:none\" \
+             target=\"_blank\" rel=\"noopener\">{FALLBACK_TEXT}</a></div></blockquote>\
+             <script async src=\"{EMBED_SCRIPT}\"></script></div>\n\
+             <!-- /wp:html -->"
         )
     }
 }
@@ -106,15 +120,15 @@ mod tests {
         let embed =
             VideoEmbed::from_permalink("https://www.instagram.com/reel/Dx1Ab-cdEfG/").unwrap();
         assert_eq!(
-            embed.src(),
-            "https://www.instagram.com/reel/Dx1Ab-cdEfG/embed/"
+            embed.permalink(),
+            "https://www.instagram.com/reel/Dx1Ab-cdEfG/"
         );
     }
 
     #[test]
     fn a_post_gets_a_post_player() {
         let embed = VideoEmbed::from_permalink("https://www.instagram.com/p/AbC_123/").unwrap();
-        assert_eq!(embed.src(), "https://www.instagram.com/p/AbC_123/embed/");
+        assert_eq!(embed.permalink(), "https://www.instagram.com/p/AbC_123/");
     }
 
     #[test]
@@ -124,8 +138,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            embed.src(),
-            "https://www.instagram.com/reel/Dx1Ab-cdEfG/embed/"
+            embed.permalink(),
+            "https://www.instagram.com/reel/Dx1Ab-cdEfG/"
         );
     }
 
@@ -156,12 +170,16 @@ mod tests {
             .html();
         assert!(html.starts_with("<!-- wp:html -->\n"));
         assert!(html.ends_with("\n<!-- /wp:html -->"));
-        assert_eq!(html.matches("<iframe").count(), 1);
-        assert!(html.contains("src=\"https://www.instagram.com/reel/Dx1Ab-cdEfG/embed/\""));
-        assert!(html.contains("max-width:400px"));
-        assert!(html.contains("height=\"880\""));
+        assert_eq!(html.matches("<blockquote").count(), 1);
+        assert_eq!(html.matches("<script").count(), 1);
+        assert!(!html.contains("<iframe"));
+        assert!(html.contains(
+            "data-instgrm-permalink=\"https://www.instagram.com/reel/Dx1Ab-cdEfG/?utm_source=ig_embed&amp;utm_campaign=loading\""
+        ));
+        assert!(html.contains("data-instgrm-version=\"14\""));
+        assert!(html.contains("<script async src=\"https://www.instagram.com/embed.js\"></script>"));
+        assert!(html.contains("<div id=\"video\" style=\"max-width:540px"));
         assert!(html.contains("<div id=\"video\""));
-        assert!(!html.contains("script"));
         assert!(!html.contains("?x="));
     }
 
@@ -170,9 +188,10 @@ mod tests {
         let embed = VideoEmbed::from_permalink("https://www.instagram.com/reel/Dx1Ab/").unwrap();
         let link = embed.link_html();
         assert!(link.contains("<a href=\"#video\">Ver el vídeo</a>"));
+        assert!(!link.contains("script"));
         assert!(link.starts_with("<!-- wp:paragraph -->"));
         assert!(embed.html().contains("id=\"video\""));
-        assert!(!link.contains("iframe"));
+        assert!(!link.contains("blockquote"));
     }
 
     #[test]
@@ -187,8 +206,8 @@ mod tests {
         })
         .unwrap();
         assert_eq!(
-            ok.unwrap().src(),
-            "https://www.instagram.com/reel/Dx1Ab/embed/"
+            ok.unwrap().permalink(),
+            "https://www.instagram.com/reel/Dx1Ab/"
         );
         assert_eq!(
             resolve(VideoChoice::InstagramEmbed {
